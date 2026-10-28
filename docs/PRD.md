@@ -1,14 +1,77 @@
 # PRD — Satukelas Marketing CRM
 
-**Versi:** 0.8: Autentikasi Admin & Marketing dengan isolasi server-side selesai dan terverifikasi QA
-**Status:** tahap autentikasi multi-role (ADMIN dan MARKETER) serta isolasi data server terverifikasi QA v0.8; 46 unit test dan 34 Playwright browser test lolos. Seluruh rute CRM aktif terproteksi sesi, dengan isolasi ketat antar-akun Marketing di level server.
+**Versi:** 0.13: Kartu Nama Otomatis Web Admin, Pengaturan Akun Pengguna, dan Landing Member Tanpa Katalog/Bundling Statis
+**Status:** implementasi fitur kartu nama otomatis (`MKT-FR-022`), pengaturan akun profil & password pengguna (`MKT-FR-023`) pada web admin CRM, serta pemeliharaan landing profil member (`/tim/[slug]` & `/m/[slug]`) tanpa grid produk statis dan tanpa bundling. Penegasan: tidak ada fitur atau formulir pendaftaran magang. Hasil uji tercatat pada [QA Member Landing](QA_MEMBER_LANDING.md).
 **Bahasa / zona waktu / mata uang:** Indonesia / Asia/Jakarta (WIB) / IDR
 **Pemilik produk:** perwakilan Satukelas Projects (nama penanggung jawab perlu ditetapkan)  
 **Pembaca:** pemilik bisnis, tim marketing, desainer, developer, QA, dan pengelola VPS
 
 Dokumen pasangan: [ERD](ERD.md) · [UI/UX Requirements](UI_UX_REQUIREMENTS.md). Ketiganya merupakan satu kontrak pengembangan. Dokumen website publik di `../PRD.md`, `../ERD.md`, dan `../UI_UX_REQUIREMENTS.md` tidak digantikan oleh paket ini.
 
-### Status implementasi v0.8 — Autentikasi Admin & Marketing (QA terverifikasi)
+### Penambahan kontak member marketing — admin
+
+Admin dapat menambah, melihat, mengubah dan mengosongkan telepon/WhatsApp serta alamat tempat tinggal di pengelolaan member. Label email menjadi "Alamat Email Aktif", tetap email login yang wajib valid dan unik; belum ada verifikasi kotak masuk. Telepon dan alamat opsional untuk kompatibilitas data lama. Alamat hanya untuk administrasi internal, tidak diterbitkan ke landing/kartu nama. Kriteria penerimaan: create/edit/reload/clear berhasil, payload invalid ditolak tanpa mutasi sebagian, akses tanpa admin ditolak, form mobile tanpa overflow halaman. Penyimpanan lokal saat ini in-memory dan hilang saat restart; persistensi database belum termasuk implementasi ini.
+
+### Kontrak web admin v0.13 — Kartu Nama Otomatis & Pengaturan Akun
+
+1. **Pembuatan Kartu Nama Otomatis (`MKT-FR-022`):**
+   - **Sumber Data:** Menghasilkan kartu nama profesional secara otomatis berdasarkan data profil member marketing yang tersimpan di sistem (nama lengkap, jabatan/title, nomor WhatsApp/telepon PIC, email akun, slug URL landing page personal `/tim/[slug]`, dan foto profil/avatar).
+   - **Desain & Sisi Kartu:** Mengikuti identitas visual Contra Neo-Brutalisme Satukelas Projects (border hitam 2px, hard drop shadow, tipografi Geist tebal, warna brand pink `#FD5392`, biru `#4150B1`, kuning `#F6BF75`). Menyediakan dua sisi kartu:
+     - **Sisi Depan:** Logo & identitas Satukelas Projects, nama lengkap PIC, jabatan, badge terverifikasi, nomor WhatsApp, email, dan URL landing page.
+     - **Sisi Belakang:** Tagline brand ("Solusi Buku Tahunan Sekolah & Kenangan Tak Terlupakan"), ringkasan pilar keunggulan (Buku Cetak Eksklusif, Augmented Reality, Video Dokumentasi, Desain Kustom), dan QR Code dinamis beresolusi tinggi yang terhubung langsung ke landing page referral PIC atau nomor WhatsApp.
+   - **Opsi Ekspor & Cetak:**
+     - **Unduh Kartu (PNG):** Tombol ekspor gambar beresolusi tinggi (rasio 90mm x 54mm, 300 DPI canvas) yang siap dibagikan ke WhatsApp status atau media sosial.
+     - **Cetak Kartu (Print):** Tombol cetak langsung browser yang memicu layout cetak `@media print` terisolasi, menyembunyikan elemen UI web admin dan hanya menampilkan kartu nama siap potong.
+   - **Hak Akses & Penempatan:**
+     - **Role ADMIN:** Tersedia tombol aksi `[Kartu Nama]` pada setiap baris member di halaman Tim Marketing (`/members`). Admin dapat melihat, mengkustomisasi tema, dan mengunduh/mencetak kartu nama untuk seluruh anggota tim marketing.
+     - **Role MARKETER & ADMIN:** Tersedia tombol cepat "Kartu Nama Saya" pada profil sidebar web admin, sehingga member yang login dapat langsung mengakses dan mencetak kartu nama identitasnya secara mandiri.
+
+2. **Pengaturan Akun & Keamanan Pengguna (`MKT-FR-023`):**
+   - **Pembaruan Data Diri (Profil Akun):**
+     - Setiap pengguna yang sedang login (baik ADMIN maupun MARKETER) dapat memperbarui profil diri: nama lengkap, alamat email, nomor WhatsApp/telepon PIC, dan foto profil/avatar (upload file gambar atau URL).
+     - Validasi keunikan email: Jika email diubah, server memverifikasi agar tidak bentrok dengan akun lain (member, admin, konfigurasi) secara case-insensitive trim.
+   - **Pembaruan Keamanan (Ganti Kata Sandi):**
+     - Pengguna dapat mengganti kata sandi dengan memasukkan kata sandi saat ini (current password), kata sandi baru (minimal 8 karakter), dan konfirmasi kata sandi baru.
+     - Kata sandi diverifikasi dengan hashing scrypt dan timingSafeEqual. Kata sandi baru di-hash dan disimpan secara aman.
+   - **Penyegaran Sesi Tanpa Logout:**
+     - Setiap perubahan nama, email, atau kata sandi otomatis memperbarui `sessionVersion` dan merefresh cookie sesi HttpOnly bertanda tangan (`marketing_session`) dengan data terbaru, sehingga pengguna tetap dalam sesi aktif tanpa terputus secara tidak terduga.
+   - **Penempatan:**
+     - Tombol "Pengaturan Akun" tersedia di panel profil sidebar untuk semua pengguna yang login.
+     - Untuk akun ADMIN, form pengaturan akun dan ganti kata sandi juga terintegrasi langsung di dalam halaman Pengaturan (`/settings`).
+
+3. **Penegasan Lingkup (Tanpa Form Magang):**
+   - Sistem Satukelas Marketing CRM dan landing page publik **tidak memiliki formulir pendaftaran magang (form magang)** atau jalur penerimaan magang. Fokus sistem murni pada operasional CRM sekolah, rekrutmen mitra tim marketing, landing profil personal marketing, serta identitas digital tim marketing.
+
+### Kontrak landing profil member & area layanan v0.13
+
+- **Rute Publik Personal:** Tersedia rute `/tim/[slug]` dan alias `/m/[slug]` yang dapat diakses publik oleh pihak sekolah, panitia OSIS, dan guru tanpa memerlukan login sesi CRM.
+- **Resolusi Slug:** Mendukung pencarian member berdasarkan slug ramah (`toSlug(name)` seperti `yunus`, `dzaky`), identifier unik (`usr_mkt_01`), atau prefix email.
+- **Guard Keaktifan & 404:** Hanya menampilkan profil member dengan status `isActive === true`. Member nonaktif atau slug tidak ditemukan mengembalikan tampilan 404 ramah Satukelas Projects dengan opsi kembali ke halaman utama.
+- **Personal Branding Member:** Menampilkan foto avatar asli (JPEG/PNG/WebP max 2MB Base64) atau fallback karakter editorial resmi Satukelas, nama lengkap, role konsultasi, badge PIC terverifikasi, dan nomor WhatsApp kontak.
+- **Area Layanan Satukelas Projects:** Pertahankan section `#produk`, label katalog dan heading “Karya Kenangan & Solusi Media Sekolah”. Hapus grid pada selector `#produk > div > div:nth-child(2)` beserta kartu, harga dan CTA produk statis. Tidak menambahkan data pengganti atau placeholder kartu.
+- **Bundling Dihapus:** Section `#paket`, kartu Starter/Populer/All-in-One, opsi bundling di form, serta tautan paket di header/footer tidak tersedia.
+- **Sumber Layanan Berikutnya:** Data layanan direncanakan berasal dari API company profile `satukelasprojects`. Endpoint, payload, autentikasi, cache dan state pemuatan belum disepakati; integrasi bukan cakupan v0.13. Jangan menganggap pilihan minat pada form sebagai katalog API.
+- **Generator Pesan WhatsApp Referral (Lead Attribution):** Form interaktif / tombol CTA yang merangkai pesan otomatis terpersonalisasi menuju WhatsApp PIC terkait, menyertakan nama sekolah, estimasi siswa, layanan yang diminati, serta tag `Ref: [member.id] - [member.name]`. Form hanya membuka WhatsApp; tidak otomatis menyimpan lead atau `ownerId` ke CRM.
+- **Desain Neo-Brutalisme Satukelas:** Border hitam pekat 2px, hard drop shadow (`box-shadow: 4px 4px 0px #000`), palet putih/hitam, primary pink `#FD5392`, support blue `#4150B1`, yellow `#F6BF75`, font Geist, dan karakter editorial flat 2D resmi.
+
+### Kontrak hardening v0.11 — sesi dan integritas member
+
+- Password member dinamis hanya disimpan sebagai hash `scrypt$<salt>$<key>`; tidak ada `rawPassword` pada store/registry/response.
+- Reset password, perubahan email, dan perubahan status merotasi versi sesi acak. Semua cookie lama ditolak pada request berikutnya (API 401, halaman kembali login), termasuk setelah email/status dikembalikan. Hapus akun tanpa relasi membatalkan akses login dan sesi lama.
+- Hapus/nonaktifkan member ditolak dengan 409 jika masih memiliki prospek (termasuk Won/Lost) atau aktivitas, berdasarkan `ownerId` stabil dan relasi aktivitas ke peluang. Penolakan tidak mengubah member, versi sesi, timestamp, atau CRM; sesi valid tetap dapat dipakai. Tidak ada transfer PIC otomatis.
+- Pemeriksaan relasi dilakukan di store, bukan hanya UI/API. Jika sumber CRM tidak tersedia, hapus/nonaktifkan gagal tertutup dengan 503, bukan menganggap relasi kosong. Akun tanpa relasi tetap dapat dinonaktifkan/diaktifkan/dihapus.
+- Revisi lokal ini tidak menambah schema/migration. Database dan transaksi produksi tetap belum diimplementasikan. Verifikasi akhir v0.11 telah selesai dan terbukti melalui pengujian regresi unit (124 tes), API, dan E2E browser Playwright (40 tes) pada build terbaru.
+
+### Kontrak keamanan v0.10 — reset sintetis dan keunikan identitas
+
+- `DELETE /api/crm` hanya untuk sesi ADMIN (tanpa sesi 401, MARKETER/MANAGER 403), dengan `MARKETING_ENABLE_SYNTHETIC_CRM=true`; flag mati menghasilkan 503 tanpa mengubah state. Endpoint ini bukan penghapusan CRM operasional.
+- Reset mensyaratkan header Origin yang diizinkan; Origin kosong, invalid, tidak dikenal, atau `Sec-Fetch-Site: cross-site` menghasilkan 403. Origin loopback localhost/127.0.0.1 hanya setara pada protokol dan port sama.
+- Create/edit member menolak email yang sama setelah trim/lowercase dengan member lain, Admin terkonfigurasi, Manager demo, dan seluruh `MARKETING_USERS_JSON` termasuk akun nonaktif. Konflik menghasilkan 400 dengan pesan `Email sudah terdaftar`, tanpa perubahan profil/status/timestamp atau memutus sesi Admin.
+- Semua validasi PATCH selesai sebelum perubahan diterapkan. Registry konfigurasi yang invalid tetap fail-closed; revisi ini tidak memperbaiki konfigurasi rusak secara otomatis.
+- Tidak ada database/migration baru. Store member/CRM masih memori proses; akun registry konfigurasi belum dikelola melalui CRUD ini. Revokasi sesi kini dicakup v0.11; reassignment ownership tetap tidak tersedia.
+- Bukti eksekusi dicatat pada laporan QA; angka v0.8 di bawah merupakan hasil historis, bukan kelulusan revisi ini.
+
+### Status implementasi v0.8 — Autentikasi Admin & Marketing (QA historis)
 
 - **Multi-Role RBAC:** Login `/login` mendukung role `ADMIN` dan `MARKETER`. Role `MANAGER` belum diberi izin akses (HTTP 403).
 - **Pembatasan Layar Marketing:** Pengguna role `MARKETER` hanya memiliki akses ke 6 layar CRM: `/dashboard`, `/opportunities` (alias `/schools`), `/pipeline`, `/follow-ups`, `/activities`, dan `/reports`. Rute `/settings`, `/admin`, dan namespace `/preview` ditolak di level server dengan status HTTP 403 Forbidden ("Akses ditolak. Halaman ini hanya untuk Administrator.") dan tidak ditampilkan di navigasi sidebar.
@@ -281,6 +344,7 @@ P0 wajib MVP; P1 ditunda. Semua contoh pengujian memakai data sintetis, bukan ko
 | MKT-FR-018 | P1 | Reminder eksternal. Kanal opt-in disetujui, dedupe, lock job, retry terbatas, audit delivery; tidak mengirim pada tugas terminal/arsip atau PIC yang tidak berhak. |
 | MKT-FR-019 | P0 | Landing publik persuasif untuk **calon mitra/anggota tim marketing Satukelas Projects**. Root app-relative `/` terbaca anonim dan saat DB CRM tidak tersedia, tanpa query DB atau lookup sesi. Narasi: relasi sekolah, mengenalkan karya yearbook/dokumentasi, kolaborasi, peran dan kecocokan; bukan penjelasan fitur/pipeline CRM atau preview dashboard. CTA primer dengan copywriting persuasif Gen Z (**Gas Mulai Bareng Kami** / **Gas Bikin Cerita Bareng**) berdesain tombol hitam solid Neo-Brutalisme dengan direct output value menuju obrolan pendaftaran WhatsApp tujuan kemitraan (nomor preview belum terverifikasi) (`https://wa.me/6281234567890?text=Halo%20Satukelas%20Projects%2C%20saya%20tertarik%20mendaftar%20sebagai%20mitra%20marketing.%20Mohon%20informasi%20pendaftaran%20dan%20persyaratannya.`), didampingi navigasi informasional `#gabung` dan `#alur`; **Masuk akun tim** → `/login` hanya sekunder. Pendaftaran diproses langsung via chat WhatsApp tanpa form rekrutmen internal CRM; tanpa klaim komisi/penghasilan/lowongan aktif/testimoni/pelatihan/benefit faktual. Gunakan SVG resmi Open Peeps repo sesuai Character Guidelines; putih/hitam/pink `#FD5392`, Geist, Neo-Brutalisme. Seluruh data operasional/PII dilarang pada HTML, RSC/JSON, metadata dan aset publik. Tanpa form, signup publik, lead intake, endpoint rekrutmen, tabel baru, inbound atau demo interaktif publik; route/API/export/file privat tetap menolak akses anonim. |
 | MKT-FR-020 | P0 | CRUD Member Marketing & Reset Password Admin. Khusus role ADMIN: manajemen akun tim marketing (`MARKETER`). Tambah member baru dengan nama, email, password awal (di-hash scrypt), input gambar diri/avatar (JPEG/PNG/WebP, max 2MB) dengan preview interaktif, dan status keaktifan. Edit data profil member dan pembaruan foto profil. Fitur reset password akun marketing (password baru min 8 karakter di-hash scrypt dengan salt acak). Hapus/nonaktifkan akun member dengan proteksi integritas data peluang (`ownerId`). Role MARKETER dilarang mengakses form dan endpoint manajemen akun (HTTP 403 Forbidden). |
+| MKT-FR-021 | P0 | Landing Publik Profil Member Marketing & Etalase Produk Satukelas Projects. Rute publik `/tim/[slug]` dan alias `/m/[slug]`. Menyajikan identitas personal branding member marketing (`MARKETER`), foto avatar (atau karakter editorial resmi), badge PIC terverifikasi, area `#produk` dengan header tanpa grid/kartu/harga statis dan tanpa section/tautan/opsi bundling, serta generator pesan WhatsApp referral interaktif dengan tag ID/nama member (tanpa penyimpanan lead otomatis). Data layanan API company profile direncanakan terpisah dan belum diintegrasikan. Resolusi slug ramah nama (`yunus`, `dzaky`), identifier unik (`usr_mkt_01`), dan email prefix. Guard keaktifan: member nonaktif atau slug tidak ditemukan menampilkan 404 ramah Satukelas Projects. Desain Contra Neo-Brutalisme (border 2px solid hitam, hard shadow 4px, `#FD5392`, `#4150B1`, `#F6BF75`, font Geist). |
 
 ## 8. Definisi KPI, filter, dan waktu
 
@@ -386,6 +450,8 @@ Kode QA berikut adalah spesifikasi uji penerimaan, **belum hasil pengujian aplik
 | MKT-FR-018 | reminder_deliveries | MKT-S07,MKT-S09 | Jobs (P1) | QA-018: lock, retry, dedupe, reassignment dan cancel sebelum kirim |
 | MKT-FR-019 | Copy/aset resmi statis version-controlled, tanpa tabel/endpoint rekrutmen baru; batas auth server | MKT-S13,MKT-S01 (login sekunder akun undangan) | Public UI + Access | QA-019: audiens calon mitra/tim marketing, narasi peran/karya/relasi dan ketidakpastian eksplisit; CTA primer Lihat langkah bergabung → #gabung, login sekunder → /login; SVG resmi Open Peeps, tanpa preview dashboard/penjelasan fitur CRM/klaim tak bersumber/form/signup/lead intake; mobile/keyboard; tanpa PII pada HTML/RSC/JSON/metadata/aset, DB down tidak merusak konten statis, tanpa query DB/sesi; direct private URL/API/export/file tetap ditolak, public cache tidak berisi data sesi |
 | MKT-FR-020 | marketing_users, crm_members | MKT-S14 | Identity & Team Management | QA-020: CRUD member marketing (create, read list, update, delete/deactivate), upload gambar profil/avatar (preview interaktif, validasi tipe JPG/PNG/WebP, max 2MB), reset password scrypt (min 8 karakter), proteksi relasi ownerId, otorisasi ADMIN only (MARKETER ditolak 403) |
+
+| MKT-FR-021 | Profil publik member; header layanan tanpa model katalog/bundling lokal atau migration baru | MKT-S14 (landing `/tim/[slug]`, alias `/m/[slug]`) | Public member landing | QA-021: profil/header produk tetap tampil; selector grid, `#paket`, tautan paket, kartu/harga statis dan opsi bundling tidak ada; alias/404, workflow/FAQ, live preview WhatsApp dengan referral, anchor dan responsivitas tetap berfungsi; tanpa request API layanan |
 
 Tambahan wajib QA: PostgreSQL down tidak menghasilkan sukses palsu; disk penuh/backup gagal menghasilkan alert; XSS di nama/catatan ditampilkan sebagai teks; CSV berawalan `=,+,-,@` dinetralisir; zip bomb ditolak; formula sumber terpetakan boleh dibaca tanpa dieksekusi dan hasil dihitung ulang dari operand; formula tak dikenal menjadi blocking issue import sampai ditinjau sesuai ERD; akses file tidak memakai URL public. Uji RPO/RTO bukan sekadar memastikan file backup ada.
 

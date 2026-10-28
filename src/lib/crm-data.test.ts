@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createDemo, summarize } from "./crm-demo";
 import { scopeCrmData, createOwnedProspect, updateOwnedOpportunity, getOwnedOpportunity } from "./crm-data";
 import type { SessionPayload } from "./auth";
-const marketer: SessionPayload = { userId: "usr_mkt_01", name: "Yunus", email: "fixture@example.invalid", role: "MARKETER", iat: 1, exp: 9999999999 };
+const marketer: SessionPayload = { userId: "usr_mkt_01", name: "Yunus", email: "fixture@example.invalid", role: "MARKETER", iat: 1, exp: 9999999999, sessionVersion: "test-session-version" };
 const admin = { ...marketer, userId: "usr_admin_01", role: "ADMIN" as const };
 function fixture(): ReturnType<typeof createDemo> {
  const s = createDemo();

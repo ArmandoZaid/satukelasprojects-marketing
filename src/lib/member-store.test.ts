@@ -7,13 +7,18 @@ import {
   deleteMarketingMember,
   resetMarketingMembers,
   validateAvatarDataUrl,
+  memberNameToSlug,
+  getMarketingMemberBySlug,
 } from "./member-store";
+import { writeCrmStore } from "./crm-store";
 import { authenticateUser } from "./auth";
 
 describe("member-store (CRUD Member Marketing & Reset Password)", () => {
   beforeEach(() => {
     process.env.MARKETING_ENABLE_DEMO_AUTH = "true";
     resetMarketingMembers();
+    process.env.MARKETING_ENABLE_SYNTHETIC_CRM = "true";
+    writeCrmStore({ opportunities: [], activities: [] });
   });
 
   describe("getMarketingMembers", () => {
@@ -234,6 +239,41 @@ describe("member-store (CRUD Member Marketing & Reset Password)", () => {
       expect(validateAvatarDataUrl("data:image/gif;base64,R0lGODlh")).toBe(false);
       expect(validateAvatarDataUrl("data:application/pdf;base64,JVBERi0=")).toBe(false);
       expect(validateAvatarDataUrl("javascript:alert(1)")).toBe(false);
+    });
+  });
+
+  describe("memberNameToSlug & getMarketingMemberBySlug", () => {
+    it("mengonversi nama menjadi slug ramah URL secara konsisten", () => {
+      expect(memberNameToSlug("Yunus")).toBe("yunus");
+      expect(memberNameToSlug("Dzaky")).toBe("dzaky");
+      expect(memberNameToSlug("Kak Rian Hidayat")).toBe("kak-rian-hidayat");
+      expect(memberNameToSlug("Ahmad @ Fauzi # 2026")).toBe("ahmad-fauzi-2026");
+    });
+
+    it("menemukan member berdasarkan id, slug nama, maupun prefix email", () => {
+      // Lookup by ID
+      const byId = getMarketingMemberBySlug("usr_mkt_01");
+      expect(byId).toBeDefined();
+      expect(byId?.name).toBe("Yunus");
+
+      // Lookup by name slug
+      const bySlug = getMarketingMemberBySlug("yunus");
+      expect(bySlug).toBeDefined();
+      expect(bySlug?.id).toBe("usr_mkt_01");
+
+      const bySlugDzaky = getMarketingMemberBySlug("dzaky");
+      expect(bySlugDzaky).toBeDefined();
+      expect(bySlugDzaky?.id).toBe("usr_mkt_02");
+
+      // Lookup by email prefix
+      const byEmail = getMarketingMemberBySlug("marketer");
+      expect(byEmail).toBeDefined();
+      expect(byEmail?.id).toBe("usr_mkt_01");
+    });
+
+    it("mengembalikan undefined jika slug tidak cocok atau kosong", () => {
+      expect(getMarketingMemberBySlug("")).toBeUndefined();
+      expect(getMarketingMemberBySlug("non-existent-marketer-99")).toBeUndefined();
     });
   });
 });

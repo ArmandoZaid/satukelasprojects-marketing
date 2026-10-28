@@ -19,6 +19,9 @@ function sanitizeMember(member: MarketingMember, prospectsCount = 0) {
     role: member.role,
     isActive: member.isActive,
     avatarUrl: member.avatarUrl,
+    phone: member.phone,
+    address: member.address,
+    title: member.title,
     createdAt: member.createdAt,
     updatedAt: member.updatedAt,
     prospectsCount,
@@ -112,6 +115,8 @@ export async function POST(request: Request) {
       email,
       password,
       avatarUrl,
+      phone: body.phone === undefined ? undefined : body.phone as string,
+      address: body.address === undefined ? undefined : body.address as string,
       isActive,
     });
 

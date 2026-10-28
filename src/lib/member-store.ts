@@ -1,4 +1,7 @@
-import { hashPassword } from "./auth";
+import { randomUUID } from "node:crypto";
+import { getRegisteredUsers, hashPassword } from "./auth";
+import { CrmDataError } from "./crm-data";
+import { readCrmStore } from "./crm-store";
 
 export interface MarketingMember {
   id: string;
@@ -7,8 +10,11 @@ export interface MarketingMember {
   role: "MARKETER";
   isActive: boolean;
   avatarUrl?: string;
+  phone?: string;
+  address?: string;
+  title?: string;
+  sessionVersion: string;
   passwordHash: string;
-  rawPassword?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,6 +24,9 @@ export interface CreateMarketingMemberInput {
   email: string;
   password: string;
   avatarUrl?: string;
+  phone?: string;
+  address?: string;
+  title?: string;
   isActive?: boolean;
 }
 
@@ -25,6 +34,9 @@ export interface UpdateMarketingMemberInput {
   name?: string;
   email?: string;
   avatarUrl?: string;
+  phone?: string;
+  address?: string;
+  title?: string;
   isActive?: boolean;
 }
 
@@ -39,7 +51,9 @@ const DEFAULT_MEMBERS: MarketingMember[] = [
     email: "marketer@satukelas.com",
     role: "MARKETER",
     isActive: true,
-    rawPassword: "MarketerSatukelas2026!",
+    phone: "081234567890",
+    title: "Konsultan Buku Tahunan",
+    sessionVersion: randomUUID(),
     passwordHash: hashPassword("MarketerSatukelas2026!"),
     createdAt: "2026-01-15T08:00:00.000Z",
     updatedAt: "2026-01-15T08:00:00.000Z",
@@ -50,7 +64,9 @@ const DEFAULT_MEMBERS: MarketingMember[] = [
     email: "dzaky@satukelas.com",
     role: "MARKETER",
     isActive: true,
-    rawPassword: "MarketerSatukelas2026!",
+    phone: "081234567891",
+    title: "Konsultan Buku Tahunan",
+    sessionVersion: randomUUID(),
     passwordHash: hashPassword("MarketerSatukelas2026!"),
     createdAt: "2026-01-16T08:00:00.000Z",
     updatedAt: "2026-01-16T08:00:00.000Z",
@@ -61,7 +77,9 @@ const DEFAULT_MEMBERS: MarketingMember[] = [
     email: "armando@satukelas.com",
     role: "MARKETER",
     isActive: true,
-    rawPassword: "MarketerSatukelas2026!",
+    phone: "081234567892",
+    title: "Senior Marketing Strategist",
+    sessionVersion: randomUUID(),
     passwordHash: hashPassword("MarketerSatukelas2026!"),
     createdAt: "2026-01-17T08:00:00.000Z",
     updatedAt: "2026-01-17T08:00:00.000Z",
@@ -72,7 +90,9 @@ const DEFAULT_MEMBERS: MarketingMember[] = [
     email: "yasser@satukelas.com",
     role: "MARKETER",
     isActive: true,
-    rawPassword: "MarketerSatukelas2026!",
+    phone: "081234567893",
+    title: "Konsultan Buku Tahunan",
+    sessionVersion: randomUUID(),
     passwordHash: hashPassword("MarketerSatukelas2026!"),
     createdAt: "2026-01-18T08:00:00.000Z",
     updatedAt: "2026-01-18T08:00:00.000Z",
@@ -118,7 +138,7 @@ export function validateAvatarDataUrl(value?: string): boolean {
   return true;
 }
 
-function isValidEmail(email: string): boolean {
+export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) && email.length <= 254;
 }
 
@@ -131,7 +151,64 @@ export function getMarketingMemberById(id: string): MarketingMember | undefined 
   return member ? { ...member } : undefined;
 }
 
+export function memberNameToSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function getMarketingMemberBySlug(slug: string): MarketingMember | undefined {
+  if (!slug) return undefined;
+  const normalized = slug.toLowerCase().trim();
+  const members = getStore();
+
+  // 1. Exact match by member id (case-insensitive)
+  const byId = members.find((m) => m.id.toLowerCase() === normalized);
+  if (byId) return { ...byId };
+
+  // 2. Exact match by slugified member name
+  const bySlug = members.find((m) => memberNameToSlug(m.name) === normalized);
+  if (bySlug) return { ...bySlug };
+
+  // 3. Match by email prefix (e.g. "marketer" from marketer@satukelas.com)
+  const byEmailPrefix = members.find(
+    (m) => m.email.split("@")[0].toLowerCase().trim() === normalized
+  );
+  if (byEmailPrefix) return { ...byEmailPrefix };
+
+  return undefined;
+}
+
+export function assertAvailableEmail(email: string, memberId?: string): void {
+  const registered = getRegisteredUsers();
+  if (!registered.length) throw new Error("Registry autentikasi tidak valid atau belum dikonfigurasi");
+  const adminEmail = (process.env.ADMIN_EMAIL || "admin@satukelas.com").toLowerCase().trim();
+  const conflictsWithRegistry = registered.some(user =>
+    user.email.toLowerCase().trim() === email && user.id !== memberId
+  );
+  if ((email === adminEmail && memberId !== "usr_admin_01") || conflictsWithRegistry ||
+      getStore().some(member => member.id !== memberId && member.email.toLowerCase().trim() === email)) {
+    throw new Error("Email sudah terdaftar");
+  }
+}
+
+function validateMemberContact(input: { phone?: string; address?: string }): void {
+  if (input.phone !== undefined && (typeof input.phone !== "string" ||
+      (input.phone.trim() !== "" && !/^[+\d][\d ()-]{6,29}$/.test(input.phone.trim())))) {
+    throw new Error("Nomor telepon harus berisi 7–30 karakter angka, spasi, +, -, atau tanda kurung.");
+  }
+  if (input.address !== undefined && (typeof input.address !== "string" || input.address.trim().length > 500 ||
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(input.address))) {
+    throw new Error("Alamat tempat tinggal maksimal 500 karakter dan harus berupa teks.");
+  }
+}
+
 export function createMarketingMember(input: CreateMarketingMemberInput): MarketingMember {
+  validateMemberContact(input);
   const name = (input.name || "").trim();
   if (!name) {
     throw new Error("Nama lengkap wajib diisi");
@@ -145,15 +222,8 @@ export function createMarketingMember(input: CreateMarketingMemberInput): Market
     throw new Error("Format email tidak valid");
   }
 
-  const adminEmail = (process.env.ADMIN_EMAIL || "admin@satukelas.com").toLowerCase().trim();
-  if (email === adminEmail) {
-    throw new Error("Email sudah terdaftar");
-  }
-
+  assertAvailableEmail(email);
   const store = getStore();
-  if (store.some((m) => m.email.toLowerCase().trim() === email)) {
-    throw new Error("Email sudah terdaftar");
-  }
 
   const password = input.password || "";
   if (password.length < 8) {
@@ -174,8 +244,11 @@ export function createMarketingMember(input: CreateMarketingMemberInput): Market
     role: "MARKETER",
     isActive: input.isActive ?? true,
     avatarUrl: input.avatarUrl?.trim() || undefined,
-    rawPassword: password,
+    phone: input.phone?.trim() || undefined,
+    address: input.address?.trim() || undefined,
+    title: input.title?.trim() || undefined,
     passwordHash: hashPassword(password),
+    sessionVersion: randomUUID(),
     createdAt: now,
     updatedAt: now,
   };
@@ -184,13 +257,15 @@ export function createMarketingMember(input: CreateMarketingMemberInput): Market
   return { ...newMember };
 }
 
-export function updateMarketingMember(id: string, input: UpdateMarketingMemberInput): MarketingMember {
+export function updateMarketingMember(id: string, input: UpdateMarketingMemberInput, rotateSession = false): MarketingMember {
   const store = getStore();
   const member = store.find((m) => m.id === id);
   if (!member) {
     throw new Error("Member marketing tidak ditemukan");
   }
 
+  validateMemberContact(input);
+  const candidate = { ...member };
   if (input.name !== undefined) {
     const name = input.name.trim();
     if (!name) {
@@ -199,7 +274,7 @@ export function updateMarketingMember(id: string, input: UpdateMarketingMemberIn
     if (name.length > 200) {
       throw new Error("Nama lengkap maksimal 200 karakter");
     }
-    member.name = name;
+    candidate.name = name;
   }
 
   if (input.email !== undefined) {
@@ -207,28 +282,40 @@ export function updateMarketingMember(id: string, input: UpdateMarketingMemberIn
     if (!email || !isValidEmail(email)) {
       throw new Error("Format email tidak valid");
     }
-    const adminEmail = (process.env.ADMIN_EMAIL || "admin@satukelas.com").toLowerCase().trim();
-    if (email === adminEmail) {
-      throw new Error("Email sudah terdaftar");
-    }
-    if (store.some((m) => m.id !== id && m.email.toLowerCase().trim() === email)) {
-      throw new Error("Email sudah terdaftar");
-    }
-    member.email = email;
+    assertAvailableEmail(email, id);
+    candidate.email = email;
   }
 
   if (input.avatarUrl !== undefined) {
     if (input.avatarUrl && !validateAvatarDataUrl(input.avatarUrl)) {
       throw new Error("Format gambar profil harus JPEG, PNG, atau WebP");
     }
-    member.avatarUrl = input.avatarUrl.trim() || undefined;
+    candidate.avatarUrl = input.avatarUrl.trim() || undefined;
+  }
+
+  if (input.phone !== undefined) {
+    candidate.phone = input.phone.trim() || undefined;
+  }
+
+  if (input.address !== undefined) {
+    candidate.address = input.address.trim() || undefined;
+  }
+
+  if (input.title !== undefined) {
+    candidate.title = input.title.trim() || undefined;
   }
 
   if (input.isActive !== undefined) {
-    member.isActive = Boolean(input.isActive);
+    candidate.isActive = Boolean(input.isActive);
   }
 
-  member.updatedAt = new Date().toISOString();
+  if (input.isActive === false) assertNoMemberRelations(id);
+
+  if (rotateSession || candidate.email !== member.email || candidate.isActive !== member.isActive) {
+    candidate.sessionVersion = randomUUID();
+  }
+  candidate.updatedAt = new Date().toISOString();
+  Object.assign(member, candidate);
   return { ...member };
 }
 
@@ -245,10 +332,18 @@ export function resetMemberPassword(id: string, newPassword: string): { success:
   }
 
   member.passwordHash = hashPassword(password);
-  member.rawPassword = password;
+  member.sessionVersion = randomUUID();
   member.updatedAt = new Date().toISOString();
 
   return { success: true, memberId: id };
+}
+
+function assertNoMemberRelations(id: string): void {
+  const crm = readCrmStore();
+  if (crm.opportunities.some(opportunity => opportunity.ownerId === id) ||
+      crm.activities.some(activity => activity.ownerId === id)) {
+    throw new CrmDataError("Member masih memiliki prospek atau aktivitas; akun belum dapat dihapus atau dinonaktifkan.", 409);
+  }
 }
 
 export function deleteMarketingMember(id: string): { success: true; deletedId: string } {
@@ -262,6 +357,7 @@ export function deleteMarketingMember(id: string): { success: true; deletedId: s
     throw new Error("Member marketing tidak ditemukan");
   }
 
+  assertNoMemberRelations(id);
   store.splice(index, 1);
   return { success: true, deletedId: id };
 }

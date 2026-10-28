@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, scryptSync } from "node:crypto";
 import { POST } from "../app/api/auth/login/route";
+import { resetMarketingMembers, resetMemberPassword } from "./member-store";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
@@ -46,6 +47,7 @@ describe("Authentication & Session Library", () => {
       delete process.env[key];
     }
     process.env.MARKETING_ENABLE_DEMO_AUTH = "true";
+    resetMarketingMembers();
   });
 
   afterEach(() => {
@@ -129,7 +131,10 @@ describe("Authentication & Session Library", () => {
     ]);
     expect(new Set(marketers.map((user) => user.email)).size).toBe(4);
     for (const user of marketers) {
-      const result = authenticateUser(user.email, user.password!);
+      const password = randomBytes(24).toString("hex");
+      resetMemberPassword(user.id, password);
+      expect(user.password).toBeUndefined();
+      const result = authenticateUser(user.email, password);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.user.id).toBe(user.id);
     }
@@ -221,7 +226,8 @@ describe("Authentication & Session Library", () => {
     vi.setSystemTime(new Date("2026-10-24T00:00:00Z"));
     process.env.AUTH_SECRET = randomBytes(32).toString("hex");
     const now = Math.floor(Date.now() / 1000);
-    const claims = { userId: "usr_admin_01", email: "admin@satukelas.com", name: "Admin", role: "ADMIN", exp: now + 60, iat: now };
+    const baseline = signSessionToken({ userId: "usr_admin_01", email: "admin@satukelas.com", name: "Admin", role: "ADMIN" }, 60);
+    const claims = JSON.parse(Buffer.from(baseline.split(".")[0], "base64url").toString("utf8"));
     const encode = (payload: unknown) => {
       const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
       return `${body}.${createHmac("sha256", process.env.AUTH_SECRET!).update(body).digest("base64url")}`;
@@ -233,6 +239,7 @@ describe("Authentication & Session Library", () => {
         { exp: undefined }, { exp: null }, { exp: "9999999999" }, { exp: now }, { exp: Number.POSITIVE_INFINITY },
         { iat: undefined }, { iat: null }, { iat: "123" }, { iat: now + 1 }, { iat: -1 }, { iat: now + 100, exp: now + 1 },
         { userId: "" }, { userId: [] }, { email: "invalid" }, { name: "" }, { name: {} }, { role: "SUPERADMIN" },
+        { sessionVersion: undefined }, { sessionVersion: null }, { sessionVersion: 1 }, { sessionVersion: "obsolete-version" },
       ].map((overrides) => ({ ...claims, ...overrides })),
     ];
     for (const payload of invalid) expect(verifySessionToken(encode(payload)) === null).toBe(true);
@@ -279,9 +286,11 @@ describe("Authentication & Session Library", () => {
   it("allows admin and marketer login API admission but denies manager with 403", async () => {
     for (const user of getRegisteredUsers()) {
       cookieState.set.mockClear();
+      const password = user.role === "MARKETER" ? randomBytes(24).toString("hex") : user.password;
+      if (user.role === "MARKETER") resetMemberPassword(user.id, password!);
       const response = await POST(new Request("http://127.0.0.1/api/auth/login", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: user.email, password: user.password }),
+        body: JSON.stringify({ email: user.email, password }),
       }));
       expect(response.status).toBe(user.role === "MANAGER" ? 403 : 200);
       expect(cookieState.set.mock.calls.length).toBe(user.role === "MANAGER" ? 0 : 1);

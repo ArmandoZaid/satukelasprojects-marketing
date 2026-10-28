@@ -58,6 +58,13 @@ Saat `MARKETING_ENABLE_DEMO_AUTH=true` aktif, tersedia akun demo lokal:
 - **Aktivitas:** `http://127.0.0.1:3100/activities`
 - **Laporan:** `http://127.0.0.1:3100/reports`
 - **Pengaturan (Khusus Admin):** `http://127.0.0.1:3100/settings`
+- **Tim Marketing (Khusus Admin):** `http://127.0.0.1:3100/admin/members` (atau `/members`)
+
+## Kontak member marketing (admin)
+
+Pada `/admin/members` atau `/members`, admin dapat menambah/mengedit nomor telepon/WhatsApp dan alamat tempat tinggal. Email aktif memakai email akun yang sama untuk login (wajib, format valid, unik; belum ada verifikasi kotak masuk). Nomor telepon opsional 7–30 karakter, alamat opsional maksimal 500 karakter. Nilai kosong menghapus kontak lama; data lama yang belum punya alamat ditampilkan sebagai "Belum diisi". Alamat hanya terlihat di tabel/form admin, tidak dipublikasikan pada landing atau kartu nama.
+
+**Batas penyimpanan saat ini:** registry member masih in-memory (`globalThis`), bukan database persisten. Data bertahan saat refresh halaman pada proses yang sama, tetapi hilang saat proses server restart dan tidak dibagi antar-instance. Jangan gunakan data pribadi asli sebelum penyimpanan produksi tersedia.
 
 ## Verifikasi dan Pengujian Kualitas
 
@@ -68,20 +75,19 @@ npm run lint
 # Pengecekan tipe TypeScript
 npm run typecheck
 
-# Unit testing (Vitest — 46 tests)
+# Unit testing (Vitest — 124 tests)
 npm run test
 
-# End-to-End browser testing (Playwright — 34 tests)
+# End-to-End browser testing (Playwright — 40 tests)
 npx playwright test
 ```
 
-Hasil verifikasi QA v0.8:
+Hasil verifikasi QA v0.11:
 - **Lint & Typecheck:** 0 diagnostics error (exit code 0).
-- **Unit Tests:** 46 tests lulus (100%) di 5 test files (`auth.test.ts`, `crm-access.test.ts`, `crm-data.test.ts`, `crm-demo.test.ts`, `public-landing.test.ts`).
-- **E2E Browser Tests:** 34 tests lulus (100%) di 5 spec files (`auth.spec.ts`, `demo-marketing.spec.ts`, `marketing-auth.spec.ts`, `public.spec.ts`, `admin.spec.ts`).
-- **Isolasi Server-Side:** Teruji lolos uji IDOR, manipulasi query owner, proteksi CSRF cross-origin, dan isolasi data dua marketer berbeda.
+- **Unit Tests:** 124 tests lulus (100%) di 11 test files (`auth.test.ts`, `crm-access.test.ts`, `crm-data.test.ts`, `crm-demo.test.ts`, `public-landing.test.ts`, `crm-security.test.ts`, `member-store.test.ts`, `member-identity.test.ts`, `member-hardening.test.ts`, `member-integrity.test.ts`, `admin-members.test.ts`).
+- **E2E Browser Tests:** 40 tests lulus (100%) di 7 spec files (`auth.spec.ts`, `demo-marketing.spec.ts`, `marketing-auth.spec.ts`, `public.spec.ts`, `admin.spec.ts`, `members.spec.ts`, `security.spec.ts`).
+- **Isolasi Server-Side & Hardening:** Teruji lolos uji IDOR, manipulasi query owner, proteksi CSRF cross-origin/loopback kanonik, pencabutan sesi seketika via `sessionVersion`, proteksi relasi 409 Conflict & 503 Fail-Closed, serta CRUD member dengan live avatar preview.
 
 Laporan pengujian lengkap:
-- Autentikasi Multi-Role & Isolasi Server (v0.8): `../../docs/marketing/QA_AUTH_MARKETING.md`
-- Frontend Publik (v0.5): `../../docs/marketing/QA_PUBLIC_FRONTEND.md`
-- Admin Preview (v0.6): `../../docs/marketing/QA_ADMIN_FRONTEND.md`
+- Autentikasi Multi-Role, Manajemen Member & Hardening (v0.11): `docs/QA_AUTH_MARKETING.md`
+- Kontrak Spesifikasi: `docs/PRD.md`, `docs/ERD.md`, `docs/UI_UX_REQUIREMENTS.md`

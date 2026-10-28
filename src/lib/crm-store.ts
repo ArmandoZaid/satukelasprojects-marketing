@@ -13,6 +13,7 @@ export function readCrmStore(): DemoState {
   return globalStore.marketingSyntheticCrm;
 }
 export function resetCrmStore(): DemoState {
+  if (process.env.MARKETING_ENABLE_SYNTHETIC_CRM !== "true") throw new CrmDataError("Reset CRM sintetis dinonaktifkan.", 503);
   const demo = createDemo();
   globalStore.marketingSyntheticCrm = {
     opportunities: demo.opportunities.map(o => ({ ...o, ownerId: seedOwners[o.owner] })),

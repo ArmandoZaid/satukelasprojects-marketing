@@ -58,8 +58,8 @@ test.describe("Admin Authentication & Role-Based Route Protection", () => {
     // Navigasi ke Settings untuk verifikasi status sesi
     await page.getByRole("link", { name: "Pengaturan", exact: true }).click();
     await expect(page).toHaveURL(/\/settings/);
-    await expect(page.getByText("Web Admin Terautentikasi (Role ADMIN)")).toBeVisible();
-    await expect(page.getByText(/Cookie HttpOnly signed HMAC-SHA256/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pengaturan akun", level: 1 })).toBeVisible();
+    await expect(page.getByLabel("Email akun")).toHaveValue("admin@satukelas.com");
 
     // Verifikasi API /api/auth/me mengembalikan status sesi aktif
     const meRes = await page.request.get("/api/auth/me");

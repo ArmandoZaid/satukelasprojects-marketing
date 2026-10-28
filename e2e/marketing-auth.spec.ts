@@ -10,8 +10,8 @@ async function login(request: APIRequestContext, index = 0) {
 }
 test.beforeEach(async ({ playwright, baseURL }) => {
  const req = await playwright.request.newContext({ baseURL });
- await login(req);
- await req.delete("/api/crm");
+ expect((await req.post("/api/auth/login", { data: { email: "admin@satukelas.com", password: "AdminSatukelas2026!" } })).status()).toBe(200);
+ expect((await req.delete("/api/crm", { headers: { Origin: baseURL! } })).status()).toBe(200);
  await req.dispose();
 });
 test("marketing login UI shows only six owned screens, no credential hints; logout clears scope", async ({ page }) => {

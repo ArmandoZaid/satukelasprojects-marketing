@@ -138,7 +138,7 @@ test("landing works without JavaScript and without font or image responses", asy
   const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   await context.route(/\.(svg|woff2?)($|\?)/, route => route.abort());
   const page = await context.newPage();
-  await page.goto("http://127.0.0.1:3100/");
+  await page.goto(process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3100/");
   await expect(page.locator("h1")).toBeVisible();
   await expect(page.getByRole("link", { name: "Gas Mulai Bareng Kami" })).toBeVisible();
   await page.locator("summary").first().click();

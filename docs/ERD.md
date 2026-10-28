@@ -1,12 +1,85 @@
 # ERD — Satukelas Marketing CRM
 
-**Versi:** 0.8: Relasi model pengguna & isolasi data server-side selesai dan terverifikasi QA
-**Status:** model pengguna terautentikasi (ADMIN dan MARKETER) dengan pemisahan kepemilikan record (`ownerId`) pada entitas Peluang (`Opportunity`) dan Aktivitas (`Activity`) terverifikasi QA v0.8; 46 unit test dan 34 Playwright browser test lolos.
+**Versi:** 0.13: Profil Member, Kartu Nama Otomatis, Pengaturan Akun, dan Batas Sumber Layanan API
+**Status:** model auth, kepemilikan `ownerId`, versi sesi, dan guard integritas tetap berlaku. Menambahkan dukungan penyimpanan atribut profil PIC (`phone`, `title`), override akun profil admin (`globalThis.__SATUKELAS_ADMIN_OVERRIDE__`), serta kontrak API `/api/account` dan `/api/account/password`. Menegaskan tidak ada model atau tabel formulir magang. Hasil uji lokal ada di [QA Member Landing](QA_MEMBER_LANDING.md).
 **Acuan:** [PRD](PRD.md) · [UI/UX Requirements](UI_UX_REQUIREMENTS.md)
 
-Model ini untuk CRM internal single-company beserta batas landing publik rekrutmen mitra/anggota tim marketing Satukelas Projects, bukan pengganti ERD website company profile existing. Tabel auth dikelola Better Auth / registry internal server; data domain dikelola aplikasi melalui Drizzle ORM.
+Model ini untuk CRM internal single-company beserta batas landing publik rekrutmen mitra/anggota tim marketing Satukelas Projects dan landing profil personal marketing, bukan pengganti ERD website company profile existing. Tabel auth dikelola Better Auth / registry internal server; data domain dikelola aplikasi melalui Drizzle ORM.
 
-### Status implementasi v0.8 — Relasi Data Pengguna & Isolasi Kepemilikan (QA terverifikasi)
+### Kontak member marketing — implementasi lokal
+
+`MarketingMember.address?: string` menampung alamat internal opsional maksimal 500 karakter; `phone?: string` menerima 7–30 karakter angka dan separator telepon. Email akun tetap wajib dan unik, tanpa status verifikasi kotak masuk. POST/PATCH `/api/admin/members` menerima kontak dan memvalidasi sebelum mutasi; string kosong menghapus kontak. GET admin mengembalikan kontak tanpa hash/sesi. Alamat tidak diteruskan sebagai props client publik. Registry saat ini masih in-memory, hilang saat restart, bukan database persisten. Tidak ada migrasi database dalam perubahan ini.
+
+### Kontrak model profil pengguna & pengaturan akun v0.13
+
+1. **Atribut Entitas Member Marketing (`MarketingMember`):**
+   - `id`: string unik (`usr_mkt_01`, `usr_mkt_02`, dst).
+   - `name`: string nama lengkap PIC (contoh: "Yunus").
+   - `email`: string alamat email unik case-insensitive.
+   - `role`: enum `"MARKETER"`.
+   - `isActive`: boolean status keaktifan.
+   - `avatarUrl`: string opsional (data URI gambar atau URL avatar).
+   - `phone`: string opsional nomor WhatsApp/telepon PIC (format e.g. "081234567890", default: nomor kantor).
+   - `title`: string opsional jabatan fungsional PIC (default: "Konsultan Buku Tahunan").
+   - `passwordHash`: format `scrypt$<salt>$<key>`.
+   - `sessionVersion`: string UUID versi sesi acak.
+   - `createdAt`, `updatedAt`: ISO-8601 timestamps.
+
+2. **Override Akun Admin (`globalThis.__SATUKELAS_ADMIN_OVERRIDE__`):**
+   - Struktur memori runtime: `{ name?: string, email?: string, phone?: string, avatarUrl?: string, passwordHash?: string, sessionVersion?: string }`.
+   - Memungkinkan akun ADMIN memperbarui profil dan kata sandi tanpa merombak variabel environment statis server, dengan fallback aman ke `process.env.ADMIN_EMAIL` dan `process.env.ADMIN_PASSWORD`.
+
+3. **Kontrak Endpoint API Akun Pengguna:**
+   - `GET /api/account`: Mengembalikan info profil akun yang sedang login (`{ user: { id, name, email, role, phone, title, avatarUrl } }`).
+   - `PATCH /api/account`: Memperbarui profil akun yang sedang login (`name`, `email`, `phone`, `avatarUrl`, `title`).
+     - Validasi keunikan email terhadap registry keseluruhan.
+     - Jika email atau nama berubah, token sesi cookie HttpOnly otomatis di-refresh dengan identitas baru.
+   - `POST /api/account/password`: Mengubah kata sandi akun yang sedang login.
+     - Body: `{ currentPassword, newPassword, confirmPassword }`.
+     - Validasi password lama dengan `timingSafeEqual`.
+     - Validasi panjang minimal password baru (8 karakter) dan konfirmasi kesamaan.
+     - Merotasi `sessionVersion` dan merefresh cookie sesi sehingga sesi pengguna tetap berlanjut.
+
+4. **Penegasan Model Magang (Tanpa Form Magang):**
+   - Tidak ada entitas `InternApplicant`, `InternshipForm`, atau tabel penerimaan magang.
+
+### Kontrak model profil publik & sumber layanan v0.13
+
+1. **Resolusi Slug Member (`MarketingMember`):**
+   - Setiap member marketing (`MARKETER`) memiliki slug ramah yang diderivasi secara deterministik dari nama lengkap: `toSlug(name)` (contoh: `"Yunus"` $
+ightarrow$ `"yunus"`, `"Marketer Dua"` $
+ightarrow$ `"marketer-dua"`).
+   - Resolusi rute publik `/tim/[slug]` dan `/m/[slug]` mendukung lookup 3 tingkat:
+     1. Exact match terhadap `id` pengguna (`usr_mkt_01`, `usr_mkt_02`, dst).
+     2. Exact match terhadap slug nama (`toSlug(member.name)`).
+     3. Exact match terhadap prefix alamat email (`member.email.split('@')[0]`).
+   - Guard status keaktifan: Hanya record dengan `isActive === true` yang dapat disajikan ke publik. Record dengan `isActive === false` atau slug yang tidak ditemukan menghasilkan respon HTTP 404 (Not Found).
+
+2. **Atribusi Rujukan Prospek (Lead Referral Attribution):**
+   - Ketika calon klien (sekolah/panitia) mengirimkan form konsultasi atau mengklik tombol CTA WhatsApp dari landing page `/tim/[slug]`, pesan otomatis menyertakan tag identifikasi member (`ref: [id] - [name]`).
+   - Form hanya menghasilkan pesan WhatsApp; tidak ada endpoint intake atau penulisan prospek otomatis. Jika prospek kemudian dicatatkan ke CRM, atribusi `ownerId` wajib ditetapkan dan divalidasi oleh alur CRM yang berwenang, bukan dipercaya dari query publik.
+
+3. **Batas Data Layanan Company Profile:**
+   - Grid katalog dan bundling statis tidak lagi menjadi sumber data landing member; header `#produk` tetap ada tanpa daftar pengganti. Tidak ada entitas `SatukelasProduct` atau `ProductPackage` lokal yang perlu dipersist.
+   - Data layanan berikutnya direncanakan dibaca dari API `satukelasprojects`; endpoint, payload, autentikasi, mapping ID, cache dan relasi belum ditentukan. Tidak menambah FK/tabel layanan API atau migration pada revisi ini.
+   - Konten alur kerja/FAQ dan pilihan minat layanan generik di form tetap konten presentasi, bukan katalog tersinkron, penawaran harga atau record prospek. Opsi All-in-One dihapus bersama bundling.
+
+### Kontrak integritas v0.11 — model lokal, bukan migration
+
+- `MarketingMember.passwordHash` memakai `scrypt$<salt>$<key>`; plaintext input hanya untuk hashing, tidak disimpan sebagai field member. `sessionVersion: string` acak dirotasi pada reset password/perubahan email/status.
+- Cookie menyertakan versi yang diverifikasi ulang terhadap registry aktif. Akun terhapus/nonaktif ditolak; pemulihan email/status tidak memulihkan cookie lama. Edit nama/foto saja tidak merotasi versi sesi.
+- Penghapusan/nonaktif member mengikuti RESTRICT aplikasi: prospek semua status dengan `ownerId = member.id`, aktivitas milik member, atau aktivitas yang parent opportunity-nya milik member memblokir operasi (409). Nama PIC bukan kunci relasi. Tidak ada cascade atau transfer otomatis.
+- Validasi kandidat dan pemeriksaan relasi selesai sebelum assignment/splice. Kegagalan mempertahankan seluruh store dan versi sesi. Sumber CRM tidak tersedia menghasilkan 503 untuk operasi destruktif.
+- Penyimpanan tetap in-memory dalam satu proses; PostgreSQL/Drizzle dan constraint/transaksi SQL masih rencana terpisah, tidak ada migration pada revisi ini.
+
+### Kontrak integritas v0.10
+
+- Email identitas unik case-insensitive setelah trim, lintas member dinamis, Admin, Manager demo dan registry `MARKETING_USERS_JSON` (aktif maupun nonaktif). Edit identitas sendiri dengan email yang sama diizinkan; email milik identitas lain ditolak sebelum mutasi.
+- PATCH memakai kandidat salinan dan commit setelah semua validasi lulus; kegagalan tidak mengubah field, status, hash atau `updatedAt`.
+- Reset data sintetis tidak mengubah akun/relasi atau menjadi jalur penghapusan operasional: hanya ADMIN + flag sintetis eksplisit + Origin valid. Flag juga diperiksa pada fungsi reset store.
+- Tidak menambah tabel, constraint SQL atau migration; PostgreSQL/Drizzle tetap rencana produksi. Registry invalid tetap ditolak secara fail-closed. Revokasi sesi/reset password dan proteksi orphan ownership kini mengikuti kontrak v0.11.
+
+### Status implementasi v0.8 — Relasi Data Pengguna & Isolasi Kepemilikan (QA historis)
 
 1. **Entitas Pengguna (`marketing_users`):**
    - `id`: string unik (`usr_admin_01`, `usr_mkt_01`, `usr_mkt_02`, dst).

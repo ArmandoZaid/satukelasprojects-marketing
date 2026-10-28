@@ -3,6 +3,7 @@ import path from "node:path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
   turbopack: { root: path.resolve(__dirname) },
   outputFileTracingRoot: path.resolve(__dirname),
   poweredByHeader: false,

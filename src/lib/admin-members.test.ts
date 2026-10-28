@@ -3,7 +3,9 @@ import {
   getMarketingMembers,
   resetMarketingMembers,
 } from "./member-store";
-import { authenticateUser } from "./auth";
+import { writeCrmStore } from "./crm-store";
+import { authenticateUser, verifySessionToken } from "./auth";
+import { createDemo } from "./crm-demo";
 import { GET as getMembersHandler, POST as postMemberHandler } from "../app/api/admin/members/route";
 import {
   PATCH as patchMemberHandler,
@@ -18,6 +20,7 @@ function mockAdminSession(): authModule.SessionPayload {
     email: "admin@satukelas.com",
     name: "Administrator",
     role: "ADMIN",
+    sessionVersion: "test-session-version",
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
@@ -29,6 +32,7 @@ function mockMarketerSession(): authModule.SessionPayload {
     email: "marketer@satukelas.com",
     name: "Yunus",
     role: "MARKETER",
+    sessionVersion: "test-session-version",
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
@@ -38,6 +42,8 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
   beforeEach(() => {
     process.env.MARKETING_ENABLE_DEMO_AUTH = "true";
     resetMarketingMembers();
+    process.env.MARKETING_ENABLE_SYNTHETIC_CRM = "true";
+    writeCrmStore({ opportunities: [], activities: [] });
     vi.restoreAllMocks();
   });
 
@@ -57,7 +63,8 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
         email: "marketer@satukelas.com",
         name: "Yunus",
         role: "MARKETER",
-        iat: Math.floor(Date.now() / 1000),
+        sessionVersion: "test-session-version",
+    iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -73,7 +80,8 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
         email: "admin@satukelas.com",
         name: "Administrator",
         role: "ADMIN",
-        iat: Math.floor(Date.now() / 1000),
+        sessionVersion: "test-session-version",
+    iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -93,6 +101,47 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
         expect(m.role).toBe("MARKETER");
       }
     });
+  });
+
+  it("menyimpan kontak dan alamat melalui tambah, daftar, dan edit member", async () => {
+    vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+    const request = (body: Record<string, unknown>, method = "POST") => new Request("http://127.0.0.1:3100/api/admin/members", {
+      method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const created = await postMemberHandler(request({ name: "Kontak Test", email: "kontak@example.invalid", password: "ContactTest2026!", phone: " +62 812-3456-7890 ", address: " Jl. Contoh 10\nSurabaya " }));
+    expect(created.status).toBe(201);
+    const { member } = await created.json();
+    expect(member.phone).toBe("+62 812-3456-7890");
+    expect(member.address).toBe("Jl. Contoh 10\nSurabaya");
+    const updated = await patchMemberHandler(request({ phone: "081234567899", address: "Jl. Baru 20", email: "kontak.baru@example.invalid" }, "PATCH"), { params: Promise.resolve({ id: member.id }) });
+    expect(updated.status).toBe(200);
+    expect((await updated.json()).member).toMatchObject({ phone: "081234567899", address: "Jl. Baru 20", email: "kontak.baru@example.invalid" });
+    const listing = await (await getMembersHandler()).json();
+    expect(listing.members.find((item: { id: string }) => item.id === member.id)).toMatchObject({ phone: "081234567899", address: "Jl. Baru 20" });
+    const cleared = await patchMemberHandler(request({ phone: "", address: "" }, "PATCH"), { params: Promise.resolve({ id: member.id }) });
+    expect(cleared.status).toBe(200);
+    expect((await cleared.json()).member.phone).toBeUndefined();
+    const retained = await patchMemberHandler(request({ name: "Kontak Baru" }, "PATCH"), { params: Promise.resolve({ id: member.id }) });
+    expect(retained.status).toBe(200);
+    expect((await retained.json()).member.address).toBeUndefined();
+  });
+
+  it.each([
+    { phone: "bukan nomor" }, { phone: 12345678 }, { phone: null },
+    { phone: "1".repeat(31) }, { address: "a".repeat(501) },
+    { address: { city: "Surabaya" } }, { address: null },
+  ])("menolak kontak tidak valid tanpa mengubah member: %j", async (invalid) => {
+    vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+    const before = getMarketingMembers().find(member => member.id === "usr_mkt_01");
+    const makeRequest = (method: string, body: object) => new Request("http://127.0.0.1:3100/api/admin/members", {
+      method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const response = await patchMemberHandler(makeRequest("PATCH", { name: "Tidak boleh berubah", ...invalid }), { params: Promise.resolve({ id: "usr_mkt_01" }) });
+    expect(response.status).toBe(400);
+    expect(getMarketingMembers().find(member => member.id === "usr_mkt_01")).toEqual(before);
+    const created = await postMemberHandler(makeRequest("POST", { name: "Invalid", email: "invalid@example.invalid", password: "ContactTest2026!", ...invalid }));
+    expect(created.status).toBe(400);
+    expect(getMarketingMembers().some(member => member.email === "invalid@example.invalid")).toBe(false);
   });
 
   describe("POST /api/admin/members", () => {
@@ -200,11 +249,84 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
       });
       expect(response.status).toBe(404);
     });
+
+    it("menolak penonaktifan (409) jika member memiliki relasi prospek atau aktivitas", async () => {
+      vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+      writeCrmStore({
+        opportunities: [{ ...createDemo().opportunities[0], ownerId: "usr_mkt_01" }],
+        activities: [],
+      });
+
+      const initialAuth = authenticateUser("marketer@satukelas.com", "MarketerSatukelas2026!");
+      expect(initialAuth.ok).toBe(true);
+      if (!initialAuth.ok) return;
+
+      const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_01", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+
+      const response = await patchMemberHandler(req, {
+        params: Promise.resolve({ id: "usr_mkt_01" }),
+      });
+      expect(response.status).toBe(409);
+      const data = await response.json();
+      expect(data.error).toContain("prospek atau aktivitas");
+
+      // Sesi lama tetap valid karena mutasi ditolak
+      expect(verifySessionToken(initialAuth.token)?.userId).toBe("usr_mkt_01");
+    });
+
+    it("mengembalikan 503 jika CRM tidak tersedia saat mencoba menonaktifkan", async () => {
+      vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+      process.env.MARKETING_ENABLE_SYNTHETIC_CRM = "false";
+
+      const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_01", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+
+      const response = await patchMemberHandler(req, {
+        params: Promise.resolve({ id: "usr_mkt_01" }),
+      });
+      expect(response.status).toBe(503);
+      process.env.MARKETING_ENABLE_SYNTHETIC_CRM = "true";
+    });
+
+    it("mencabut sesi lama setelah penonaktifan atau pembaruan email yang sukses", async () => {
+      vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+      writeCrmStore({ opportunities: [], activities: [] });
+
+      const initialAuth = authenticateUser("marketer@satukelas.com", "MarketerSatukelas2026!");
+      expect(initialAuth.ok).toBe(true);
+      if (!initialAuth.ok) return;
+
+      const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_01", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+
+      const response = await patchMemberHandler(req, {
+        params: Promise.resolve({ id: "usr_mkt_01" }),
+      });
+      expect(response.status).toBe(200);
+
+      // Sesi lama langsung tidak valid
+      expect(verifySessionToken(initialAuth.token)).toBeNull();
+    });
   });
 
   describe("DELETE /api/admin/members/[id]", () => {
-    it("berhasil menghapus member marketing oleh ADMIN", async () => {
+    it("berhasil menghapus member marketing oleh ADMIN dan mencabut sesi lamanya", async () => {
       vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+      writeCrmStore({ opportunities: [], activities: [] });
+
+      const initialAuth = authenticateUser("armando@satukelas.com", "MarketerSatukelas2026!");
+      expect(initialAuth.ok).toBe(true);
+      if (!initialAuth.ok) return;
 
       const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_03", {
         method: "DELETE",
@@ -220,6 +342,64 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
 
       const remaining = getMarketingMembers();
       expect(remaining.some((m) => m.id === "usr_mkt_03")).toBe(false);
+
+      // Sesi lama langsung dicabut
+      expect(verifySessionToken(initialAuth.token)).toBeNull();
+    });
+
+    it("menolak penghapusan akun jika Origin tidak diizinkan", async () => {
+      vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+
+      const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_03", {
+        method: "DELETE",
+        headers: { Origin: "http://malicious-site.example.com" },
+      });
+
+      const response = await deleteMemberHandler(req, {
+        params: Promise.resolve({ id: "usr_mkt_03" }),
+      });
+      expect(response.status).toBe(403);
+    });
+
+    it("menolak penghapusan akun (409) jika member masih memiliki prospek atau aktivitas", async () => {
+      vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+      writeCrmStore({
+        opportunities: [{ ...createDemo().opportunities[0], ownerId: "usr_mkt_03" }],
+        activities: [],
+      });
+
+      const initialAuth = authenticateUser("armando@satukelas.com", "MarketerSatukelas2026!");
+      expect(initialAuth.ok).toBe(true);
+      if (!initialAuth.ok) return;
+
+      const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_03", {
+        method: "DELETE",
+      });
+
+      const response = await deleteMemberHandler(req, {
+        params: Promise.resolve({ id: "usr_mkt_03" }),
+      });
+      expect(response.status).toBe(409);
+      const data = await response.json();
+      expect(data.error).toContain("prospek atau aktivitas");
+
+      // Sesi tetap aman dan tidak dicabut
+      expect(verifySessionToken(initialAuth.token)?.userId).toBe("usr_mkt_03");
+    });
+
+    it("mengembalikan 503 jika CRM tidak tersedia saat mencoba menghapus member", async () => {
+      vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+      process.env.MARKETING_ENABLE_SYNTHETIC_CRM = "false";
+
+      const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_03", {
+        method: "DELETE",
+      });
+
+      const response = await deleteMemberHandler(req, {
+        params: Promise.resolve({ id: "usr_mkt_03" }),
+      });
+      expect(response.status).toBe(503);
+      process.env.MARKETING_ENABLE_SYNTHETIC_CRM = "true";
     });
 
     it("menolak penghapusan akun Administrator", async () => {
@@ -237,8 +417,13 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
   });
 
   describe("POST /api/admin/members/[id]/reset-password", () => {
-    it("berhasil mereset kata sandi member marketing oleh ADMIN dan langsung dapat digunakan login", async () => {
+    it("berhasil mereset kata sandi member marketing oleh ADMIN dan mencabut seluruh sesi lamanya", async () => {
       vi.spyOn(authModule, "getServerSession").mockResolvedValue(mockAdminSession());
+
+      const initialAuth = authenticateUser("dzaky@satukelas.com", "MarketerSatukelas2026!");
+      expect(initialAuth.ok).toBe(true);
+      if (!initialAuth.ok) return;
+      expect(verifySessionToken(initialAuth.token)?.userId).toBe("usr_mkt_02");
 
       const req = new Request("http://127.0.0.1:3100/api/admin/members/usr_mkt_02/reset-password", {
         method: "POST",
@@ -255,9 +440,15 @@ describe("API /api/admin/members (RBAC, CRUD & Reset Password)", () => {
       const data = await response.json();
       expect(data.success).toBe(true);
 
-      // Verifikasi login dengan password baru
+      // Verifikasi sesi lama langsung dicabut
+      expect(verifySessionToken(initialAuth.token)).toBeNull();
+
+      // Verifikasi login dengan password baru berhasil
       const newAuth = authenticateUser("dzaky@satukelas.com", "BrandNewDzakyPassword2026!");
       expect(newAuth.ok).toBe(true);
+      if (newAuth.ok) {
+        expect(verifySessionToken(newAuth.token)?.userId).toBe("usr_mkt_02");
+      }
     });
 
     it("menolak reset password jika kurang dari 8 karakter", async () => {

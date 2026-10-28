@@ -20,6 +20,9 @@ function sanitizeMember(member: MarketingMember, prospectsCount = 0) {
     role: member.role,
     isActive: member.isActive,
     avatarUrl: member.avatarUrl,
+    phone: member.phone,
+    address: member.address,
+    title: member.title,
     createdAt: member.createdAt,
     updatedAt: member.updatedAt,
     prospectsCount,
@@ -89,10 +92,14 @@ export async function PATCH(
     const updatePayload: {
       name?: string;
       email?: string;
+      phone?: string;
+      address?: string;
       avatarUrl?: string;
       isActive?: boolean;
     } = {};
 
+    if (body.phone !== undefined) updatePayload.phone = body.phone as string;
+    if (body.address !== undefined) updatePayload.address = body.address as string;
     if (body.name !== undefined) updatePayload.name = String(body.name);
     if (body.email !== undefined) updatePayload.email = String(body.email);
     if (body.avatarUrl !== undefined) {
@@ -127,6 +134,10 @@ export async function DELETE(
 ) {
   try {
     await requireAdmin();
+    const origin = request.headers.get("origin");
+    if (!isAllowedOrigin(origin, request)) {
+      throw new CrmDataError("Origin tidak diizinkan.", 403);
+    }
     const { id } = await props.params;
 
     if (id === "usr_admin_01") {

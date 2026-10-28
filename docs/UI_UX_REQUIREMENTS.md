@@ -1,11 +1,90 @@
 # UI/UX Requirements — Satukelas Marketing CRM
 
-**Versi:** 0.8: Pengalaman antarmuka multi-role (Admin & Marketing) selesai dan terverifikasi QA
-**Status:** tahap otentikasi UI CRM dan penyesuaian navigasi/layar per role selesai dan terverifikasi QA v0.8; 46 unit test dan 34 Playwright browser test lolos.
+**Versi:** 0.13: Generator Kartu Nama Web Admin, Pengaturan Akun, dan Landing Member Tanpa Grid Statis/Bundling
+**Status:** implementasi generator kartu nama otomatis (`MKT-S15`), panel pengaturan akun & ganti password pengguna (`MKT-S16`), serta landing member tanpa katalog produk statis dan bundling. Penegasan: tidak ada formulir pendaftaran magang. Hasil uji tercatat di [QA Member Landing](QA_MEMBER_LANDING.md).
 **Pasangan:** [PRD](PRD.md) · [ERD](ERD.md)
-**Mode pengalaman:** **Operate** untuk ruang kerja CRM MKT-S01–MKT-S12; **Persuade / recruitment** untuk landing publik MKT-S13, mengajak calon mitra/anggota tim marketing Satukelas Projects mengenal peran dan kecocokan. CTA primer menggunakan copywriting persuasif anak muda / Gen Z (**"Gas Mulai Bareng Kami"** pada Hero, **"Gas Bikin Cerita Bareng"** pada seksi `#gabung`) dengan gaya tombol hitam solid Neo-Brutalisme, dan output action diarahkan langsung ke WhatsApp tujuan kemitraan (nomor preview belum terverifikasi) (`https://wa.me/6281234567890?text=...`) untuk pendaftaran interaktif; didampingi navigasi informasional `#gabung` dan `#alur`; bukan login atau signup internal CRM.
+**Mode pengalaman:** **Operate** untuk ruang kerja CRM; **Persuade / recruitment** untuk MKT-S13; **Personal Sales & Showcase** untuk landing profil member MKT-S14 (`/tim/[slug]`, `/m/[slug]`); **Digital & Physical Identity** untuk Generator Kartu Nama MKT-S15; **Self-Service Account Management** untuk Pengaturan Akun MKT-S16.
 
-### Status implementasi v0.8 — Antarmuka CRM Multi-Role (QA terverifikasi)
+### Kontak member marketing — admin
+
+- Form tambah/edit: Nama Lengkap PIC, Alamat Email Aktif (akun login), Nomor Telepon / WhatsApp (`tel`, maksimal 30 karakter), Alamat Tempat Tinggal (textarea, maksimal 500 karakter).
+- Email wajib, format valid dan unik. Label "aktif" adalah arahan pengisian, bukan status email terverifikasi; belum ada verifikasi email.
+- Telepon dan alamat opsional agar kompatibel dengan data lama; isian kosong menghapus nilai sebelumnya. Semua nilai di-trim dan divalidasi di server sebelum mutasi.
+- Tabel admin menampilkan kolom ringkas: Member / PIC, Email aktif, Status, Prospek Dikelola, Terdaftar, dan Aksi. Kolom nomor telepon dan alamat dipindahkan dari tampilan tabel utama ke Modal Detail Akun Member agar tabel tetap rapi dan tidak memerlukan horizontal scroll berlebihan.
+- Tombol CTA "Detail" pada setiap baris member membuka modal dialog detail lengkap berformat Neo-Brutalism (Avatar, Nama PIC, Tag Role & Status Akun, ID Pengguna, Alamat Email Aktif, Nomor Telepon/WhatsApp lengkap dengan tautan telepon dan tombol aksi Chat WhatsApp, Alamat Tempat Tinggal internal yang aman dari publikasi, Prospek Dikelola, Tanggal Terdaftar, serta tombol aksi pintas Edit Akun, Reset Password, Kartu Nama, dan Landing Page).
+- Alamat merupakan data internal: jangan sertakan pada props client publik, landing page, kartu nama, maupun respons tanpa otorisasi admin.
+- Registry member saat ini in-memory: refresh pada proses yang sama mempertahankan nilai, restart proses menghapus perubahan. Belum menjamin persistensi database.
+
+### Kontrak antarmuka v0.13 — Generator Kartu Nama (MKT-S15) & Pengaturan Akun (MKT-S16)
+
+1. **Komponen Generator Kartu Nama Otomatis (`MKT-S15`):**
+   - **Gaya Desain Neo-Brutalisme Satukelas:**
+     - Proporsi kartu fisik standar (90mm x 54mm, rasio aspek 1.67:1).
+     - Border tegas hitam 2px, sudut solid, palet warna brand: dasar putih `#FFFFFF`, teks hitam `#1A1D20`, aksen merah muda `#FD5392`, biru `#4150B1`, dan kuning `#F6BF75`.
+   - **Tampilan Dua Sisi (Double-Sided):**
+     - **Sisi Depan:** Logo Satukelas Projects, Nama Lengkap PIC dengan font tebal Geist, Jabatan / Title, badge PIC terverifikasi, detail kontak (WhatsApp dan Email), serta URL landing page referral (`satukelas.com/tim/[slug]`).
+     - **Sisi Belakang:** Tagline resmi ("Solusi Buku Tahunan Sekolah & Kenangan Tak Terlupakan"), daftar 4 pilar layanan Satukelas (Buku Tahunan Cetak, Augmented Reality, Video Dokumentasi, Desain Kustom Eksklusif), dan QR Code dinamis kontras tinggi yang dapat discan menuju landing page personal PIC atau kontak WhatsApp.
+   - **Kontrol Interaksi Preview:**
+     - Tombol toggle mode tampilan: [Sisi Depan], [Sisi Belakang], [Berdampingan (Depan & Belakang)].
+     - Opsi pilihan tema: Klasik Kontras (White/Pink), Elegan Gelap (Dark/Pink), dan Neo-Kuning (Yellow/Black).
+     - Opsi tujuan QR Code: Link Profil Landing Page atau Direct Chat WhatsApp.
+   - **Aksi Ekspor:**
+     - **Unduh Kartu (PNG):** Render sisi depan dan/atau belakang ke HTML5 Canvas resolusi tinggi (300 DPI, lebar 1050px) dengan sekali klik tombol `Unduh Kartu (PNG)`.
+     - **Cetak Kartu (Print):** Membuka dialog print browser yang mengaktifkan aturan `@media print` terisolasi: menyembunyikan navigasi, sidebar, header, dan elemen admin lain, serta menampilkan kartu nama dengan garis potong (cut marks) siap cetak di kertas A4 atau kertas foto.
+     - **Salin Tautan:** Tombol cepat menyalin URL landing page PIC untuk dibagikan ke calon klien sekolah.
+   - **Aksesibilitas & Penempatan:**
+     - Admin: Tombol `[Kartu Nama]` pada setiap baris member di tabel Tim Marketing (`/members`).
+     - Marketer & Admin: Tombol "Kartu Nama Saya" di area profil sidebar untuk akses cepat kartu nama pribadi.
+
+2. **Komponen Pengaturan Akun & Keamanan Pengguna (`MKT-S16`):**
+   - **Aksesibilitas Multi-Role:** Dapat diakses oleh Admin maupun Member Marketing yang sedang login melalui tombol "Pengaturan Akun" di sidebar web admin.
+   - **Struktur Form Pengaturan:**
+     - **Tab 1: Data Diri / Profil Akun:**
+       - Input Nama Lengkap (wajib).
+       - Input Alamat Email Akun (wajib, divalidasi keunikan oleh server).
+       - Input Nomor WhatsApp / Telepon PIC (format angka/telepon internasional atau lokal).
+       - Input Jabatan / Title (contoh: "Konsultan Buku Tahunan").
+       - Foto Profil / Avatar: Preview gambar avatar saat ini, tombol upload gambar lokal (otomatis dikonversi ke data URL base64 atau input URL avatar), dan opsi reset ke inisial nama.
+       - Badge penunjuk Role pengguna (read-only: `ROLE: ADMINISTRATOR` atau `ROLE: MARKETER`).
+     - **Tab 2: Keamanan / Ganti Kata Sandi:**
+       - Input Kata Sandi Saat Ini (wajib untuk verifikasi otentikasi).
+       - Input Kata Sandi Baru (minimal 8 karakter).
+       - Input Konfirmasi Kata Sandi Baru.
+       - Tombol "Perbarui Kata Sandi".
+     - **Area Pengaturan Sistem (Khusus ADMIN di `/settings`):**
+       - Tetap menyediakan panel Status Implementasi dan Reset Data Demo untuk keperluan simulasi lokal.
+   - **Umpan Balik Pengguna:**
+     - Notifikasi toast / alert inline dengan status aksesibel (`role="status"`, `aria-live="polite"`).
+     - Validasi form interaktif mencegah submit kosong atau password baru yang tidak cocok.
+
+3. **Penegasan Batasan (Tanpa Form Magang):**
+   - Tidak ada antarmuka, tautan menu, form input, atau dialog penerimaan magang.
+
+### Kontrak antarmuka profil member & area layanan v0.13 (MKT-S14)
+
+- **Identitas Visual Contra Neo-Brutalisme:** Border solid 2px hitam (`#000000`), hard drop shadow 4px (`box-shadow: 4px 4px 0px #000000`), radius tegas 0px atau pill badge, palet putih bersih, hitam pekat, primary pink `#FD5392`, support blue `#4150B1`, yellow `#F6BF75`, dan font Geist.
+- **Hero Profil Member:** Avatar foto asli (atau karakter SVG editorial Satukelas), badge status "PIC RESMI SATUKELAS", nama lengkap, headline ramah konsultatif, serta tombol CTA cepat WhatsApp.
+- **Area Produk:** Pertahankan `#produk`, label katalog dan heading “Karya Kenangan & Solusi Media Sekolah”. Hapus grid `#produk > div > div:nth-child(2)`, kartu, harga dan CTA produk statis. Tidak menampilkan kartu pengganti atau status API palsu.
+- **Tanpa Bundling:** Hapus section `#paket`, tautan header/footer dan opsi All-in-One pada form. Sumber layanan mendatang adalah API company profile `satukelasprojects`; endpoint/payload/autentikasi dan state API belum ditentukan, bukan implementasi revisi ini.
+- **Alur Kerja & FAQ:** Tetap tampil sesudah area produk, sebelum formulir konsultasi.
+- **Form Konsultasi Cepat (WhatsApp Generator):** Form interaktif sederhana (Nama Sekolah, Kontak, Jumlah Siswa, Layanan Diminati, Catatan) yang langsung menghasilkan format pesan rapi dan membuka link WhatsApp PIC terkait.
+- **Aksesibilitas & Responsivitas:** Validasi keyboard navigation, tag semantik ARIA, layout mengalir tanpa horizontal scroll di layar 320px, 390px, 768px, 1024px, hingga 1440px.
+
+### Kontrak interaksi v0.11 — sesi dan relasi member
+
+- Hapus/nonaktifkan PIC dengan prospek atau aktivitas menampilkan error 409 server; tabel, status, jumlah prospek dan data CRM tidak berubah. Form edit tetap terbuka agar dapat dikoreksi; konfirmasi hapus tidak menampilkan sukses sebelum response sukses.
+- Pesan menjelaskan adanya prospek/aktivitas dan bahwa akun belum dapat dihapus/dinonaktifkan. Tidak menawarkan transfer PIC yang belum diimplementasikan. Sumber relasi tidak tersedia menampilkan error 503, bukan sukses semu.
+- Reset password, perubahan email/status dan penghapusan akun mencabut sesi lama pada request berikutnya. Pengguna kembali login; email/status yang dikembalikan tidak mengaktifkan sesi lama. Admin pelaksana tetap login.
+- Uji browser wajib mencakup penolakan relasi tanpa mutasi, CRUD akun tanpa relasi, reset dan login baru, serta round trip email/status. Pertahankan desain Brutalisme existing, avatar/live preview dan RBAC.
+
+### Kontrak interaksi keamanan v0.10
+
+- Form tambah/edit Tim Marketing menampilkan pesan `Email sudah terdaftar` dari server untuk konflik member/akun lain termasuk registry konfigurasi. Modal dan isian tetap terbuka agar dapat dikoreksi; tabel/profil/status tidak diperbarui optimistis pada 400.
+- Gagal validasi tidak mengubah sebagian profil maupun timestamp, dan tidak mengeluarkan Admin dari sesi. Email dinormalisasi trim/lowercase; edit tanpa mengganti email sendiri tetap valid.
+- MARKETER tidak diberi akses reset global maupun menu manajemen member. Reset melalui API hanyalah utilitas pengujian sintetis ADMIN; bukan tombol hapus data operasional. Syarat server: sesi ADMIN, flag sintetis aktif, Origin valid; 401/403/503 tidak mengubah state.
+- Tidak ada perubahan desain visual, token, atau schema/migration. Angka QA v0.8 di bawah historis; hasil revisi pada laporan QA.
+
+### Status implementasi v0.8 — Antarmuka CRM Multi-Role (QA historis)
 
 1. **Halaman Login (`/login`):**
    - Header jelas: "Masuk ke Web Admin" dengan keterangan "Masuk dengan akun terdaftar untuk mengelola data pemasaran Satukelas Projects."
@@ -495,6 +574,74 @@ Stepper **Upload → Mapping → Review → Konfirmasi → Hasil**. Back tidak m
 - Title usulan **“Lihat langkah bergabung | Kenali peran mitra marketing”**; description **“Kenali peran mitra dan tim marketing Satukelas Projects dalam membangun relasi sekolah serta mengenalkan karya yearbook dan dokumentasi. Baca penjelasan cara bergabung.”** Jangan memakai metadata lowongan aktif, structured data `JobPosting`, gaji, benefit atau tenggat yang belum disetujui. Tidak ada metadata dashboard/fitur CRM sebagai proposisi publik.
 - Lokal/staging **noindex**. Production landing **noindex secara default sampai persetujuan publikasi/indexing pemilik produk** dan origin canonical final D-01 tersedia. Jika disetujui index, canonical/sitemap hanya landing publik yang relevan; tidak memasukkan login/setup/reset atau route privat. Metadata/Open Graph hanya copy/aset publik resmi; token setup/reset tidak masuk metadata atau referrer. Robots/noindex bukan pengaman akses.
 - Gate review: pemilik produk menyetujui copy, komposisi dan aset publik sebelum integrasi/publikasi; QA-019 memeriksa narasi/CTA/aset serta payload/akses nyata, bukan hanya screenshot. Brief ini bukan sign-off visual D-05, penetapan domain/deployment, keputusan Docker atau persetujuan skema/proses rekrutmen.
+
+### MKT-S14: Landing Publik Profil Member Marketing & Etalase Produk Satukelas Projects
+
+**Requirement / QA:** MKT-FR-021 / QA-021. **Route:** `/tim/[slug]` dan alias `/m/[slug]`. **Status:** revisi v0.13 menghapus grid statis dan bundling; integrasi layanan API ditunda.
+
+**Audiens dan tujuan:** **Pihak sekolah mitra (panitia OSIS, ketua angkatan, guru pembina, waka kesiswaan)** yang menerima kartu nama digital, tautan bio media sosial, atau proposal dari member marketing Satukelas Projects. Halaman ini menjadi alat konversi penjualan (*sales enablement tool*) yang memvalidasi keabsahan PIC resmi, memaparkan karya inovasi buku tahunan AR dan video profil sekolah, serta mempermudah konsultasi langsung via WhatsApp.
+
+#### Struktur Komponen & Urutan Tata Letak (Neo-Brutalisme / Contra Wireframe)
+
+1. **Header Publik Satukelas:**
+   - Logo resmi `satukelas.PROJECTS` dengan border bawah 2px solid hitam.
+   - Badge status: `PIC RESMI TERVERIFIKASI` dengan ikon centang dan latar belakang kuning `#FFE600` atau pink `#FD5392`.
+   - Navigasi cepat: `Katalog Produk` (`#produk`), `Alur Kerja` (`#alur`), `Tanya Biaya` (`#konsultasi`), dan CTA WhatsApp. Footer tidak memiliki tautan paket; semua anchor harus menuju section yang tersedia.
+
+2. **Hero Section — Profil Member:**
+   - **Kartu Identitas Member (Neo-Brutalist Profile Card):**
+     - Avatar: Foto asli member dari data profil (`avatarUrl` Base64) berbingkai border 3px solid hitam dengan bayangan keras `4px 4px 0px #000`. Jika foto belum diunggah, gunakan karakter ilustrasi editorial resmi Satukelas (`public/images/characters/production-editor.svg`).
+     - Nama PIC: Heading tebal huruf besar (misal: **Yunus**, **Dzaky**).
+     - Role/Jabatan: *"Konsultan Buku Tahunan & Media Kreatif Sekolah — Satukelas Projects"*.
+     - Wilayah Jangkauan: *"Siap mendampingi sekolah di Surabaya, Jawa Timur, dan seluruh Indonesia"*.
+     - Social Proof / Kredibilitas: Statistik ringkas (Garansi cetak tepat waktu 100%, Tim fotografer profesional, Sesi foto konsep tematik).
+     - Tombol Kontak Utama: Tombol aksi Neo-Brutalisme hitam solid (`button-black`) dengan teks **"Konsultasi Bareng Kak [Nama]"** yang membuka obrolan WhatsApp berformat teks otomatis.
+
+3. **Etalase Produk & Solusi Satukelas Projects (`id="produk"`):**
+   - Heading seksi: **"Karya Kenangan & Solusi Media Sekolah"** dengan sub-heading penjelasan inovasi kreatif.
+   - Susunan kartu produk 4-pilar beraksen Contra:
+     - **Pilar 01: Buku Tahunan Sekolah (BTS) AR (Unggulan / Best Seller):**
+       - Badge: `FITUR AR TERBARU`. Aksen latar pink `#FD5392` lembut / border hitam 2px.
+       - Poin Unggulan: Foto cetak di buku dapat di-scan dengan kamera ponsel untuk memutar video pesan kenangan siswa & guru tanpa perlu instal aplikasi tambahan; hardcover laminasi doff/glossy; jilid jahit benang awet anti lepas seumur hidup; sesi foto tematik tanpa batas konsep.
+     - **Pilar 02: Video Profile Institusi Sinematik:**
+       - Badge: `PPDB & AKREDITASI`. Aksen latar biru `#4150B1` lembut.
+       - Poin Unggulan: Produksi 4K UHD + drone aerial cinematic; voice-over narasi profesional; scriptwriting kreatif untuk mengangkat citra sekolah dan mendongkrak penerimaan siswa baru.
+     - **Pilar 03: Dokumentasi Wisuda & Live Streaming Multi-Cam:**
+       - Badge: `EVENT & WISUDA`. Aksen latar kuning `#F6BF75` lembut.
+       - Poin Unggulan: Siaran langsung multi-kamera Full HD 1080p ke YouTube untuk keluarga wisudawan; foto studio wisudawan di venue; penyerahan master video cepat.
+     - **Pilar 04: Merchandise & Identitas Angkatan:**
+       - Badge: `MERCHANDISE`. Aksen latar ungu `#8766AC` lembut.
+       - Poin Unggulan: Jaket varsity bordir komputer, hoodie angkatan, lanyard satin, dan exclusive yearbook box packaging.
+
+4. **Pilihan Paket Kolaborasi Rekomendasi (`id="paket"`):**
+   - **Paket 01 — Starter:** Cetak hardcover standar + 1x sesi foto konsep + master file.
+   - **Paket 02 — Populer Angkatan (Best Seller):** Buku tahunan berfitur AR + Teaser sinematik angkatan + 2x sesi foto (outdoor & studio) + bonus packaging box.
+   - **Paket 03 — All-in-One Sultan:** Buku tahunan AR + Video Profile Sekolah 4K + Dokumentasi Wisuda & Live Streaming + Merchandise box.
+   - Setiap paket dilengkapi tombol **"Pilih Paket Ini"** yang langsung mengisi form kalkulator WhatsApp.
+
+5. **Kalkulator & Form Konsultasi Interaktif (WhatsApp Lead Generator) (`id="konsultasi"`):**
+   - Form ringkas:
+     - Layanan Diminati (dropdown minat generik existing tanpa opsi bundling All-in-One; bukan katalog tersinkron API).
+     - Nama Sekolah (input teks).
+     - Perkiraan Jumlah Siswa (input angka).
+     - Nama PIC / Kontak Sekolah (input teks).
+     - Catatan Khusus / Permintaan Sampel Fisik (textarea).
+   - Live Preview Pesan WhatsApp: Kotak pratinjau teks yang berubah secara realtime.
+   - Tombol Submit WhatsApp: Tombol Neo-Brutalisme pink/hitam **"Kirim ke WhatsApp Kak [Nama]"** yang membuka URL `https://wa.me/[phone]?text=[encoded_text]` dengan tag `Ref: [member.id] - [member.name]` di dalam pesan; tidak menyimpan prospek otomatis ke CRM. Nomor WhatsApp preview tetap perlu diverifikasi sebelum produksi.
+
+6. **Alur Kerja Transparan & Garansi (`id="alur"`):**
+   - 5 Langkah pasti: (1) Ngobrol Santai & Brief Konsep, (2) Tim Datang Bawa Sampel Buku Fisik ke Sekolah, (3) Sesi Foto Seru Diarahkan Fotografer, (4) Proofing Desain Online Bersama Panitia, (5) Cetak Rapi Bergaransi Tepat Waktu.
+
+7. **Status Penanganan 404 / Member Nonaktif:**
+   - Jika member tidak ditemukan atau status `isActive === false`, sistem menyajikan halaman error 404 berdesain Contra ramah:
+     - Ilustrasi karakter Satukelas.
+     - Pesan: *"Profil Konsultan Tidak Ditemukan atau Sedang Tidak Aktif"*.
+     - Tombol aksi: *"Kembali ke Beranda Satukelas Projects"*.
+
+8. **Standar Responsivitas & Aksesibilitas:**
+   - Tidak ada overflow horizontal pada viewport 320px, 390px, 768px, 1024px, dan 1440px.
+   - Kontras warna teks memenuhi standar WCAG AAA (teks hitam pekat di atas latar putih/kuning/pink terang).
+   - Aksesibilitas form penuh dengan label semantik, aria-live pada preview pesan, dan navigasi keyboard.
 
 ## 6. Field contract UI ↔ ERD
 

@@ -1,10 +1,10 @@
-# QA Autentikasi Admin & Marketing — Satukelas Marketing CRM v0.8
+# QA Autentikasi Admin & Marketing — Satukelas Marketing CRM v0.11
 
-**Status keseluruhan: LULUS (Autentikasi Multi-Role & Isolasi Server-Side v0.8 terverifikasi)**
+**Status keseluruhan: LULUS (Autentikasi Multi-Role, Manajemen Member, Hardening Sesi & Integritas Relasi v0.11 terverifikasi)**
 
-Dokumen ini adalah lembar hasil QA resmi implementasi autentikasi multi-role (ADMIN dan MARKETER) serta isolasi data server-side pada aplikasi `apps/marketing`. Seluruh pengujian dijalankan dan diverifikasi secara lokal pada tanggal 24 Oktober 2026.
+Dokumen ini adalah lembar hasil QA resmi implementasi autentikasi multi-role (ADMIN dan MARKETER), manajemen tim marketing (CRUD member, avatar, reset password), serta hardening sesi dan integritas relasi pada aplikasi `apps/marketing`. Seluruh pengujian dijalankan dan diverifikasi secara lokal pada tanggal 25 Oktober 2026.
 
-**Kontrak Pasangan:** [PRD](PRD.md) · [ERD](ERD.md) · [UI/UX Requirements](UI_UX_REQUIREMENTS.md) v0.8.
+**Kontrak Pasangan:** [PRD](PRD.md) · [ERD](ERD.md) · [UI/UX Requirements](UI_UX_REQUIREMENTS.md) v0.11.
 
 ---
 
@@ -12,13 +12,13 @@ Dokumen ini adalah lembar hasil QA resmi implementasi autentikasi multi-role (AD
 
 | Komponen | Spesifikasi / Nilai Aktual |
 |---|---|
-| Repositori & Aplikasi | `satukelasprojects` / `apps/marketing` |
+| Repositori & Aplikasi | `satukelas-marketing` |
 | URL Server Aktif | `http://127.0.0.1:3100` (loopback) |
 | Runtime & Server | Node.js `v26.7.0`, Next.js `16.4.3` (Standalone precompiled build via `scripts/start-demo-server.mjs`) |
 | Pengujian Unit | Vitest `v5.0.5` |
 | Pengujian Browser E2E | Playwright `v1.64.1` (Chromium / headless) |
 | Environment Variables Aktif | `PORT=3100`, `MARKETING_HOSTNAME=127.0.0.1`, `MARKETING_ENABLE_DEMO_AUTH=true`, `MARKETING_ENABLE_SYNTHETIC_CRM=true`, `USE_SECURE_COOKIES=false` |
-| Tanggal Eksekusi QA | **24 Oktober 2026 WIB** |
+| Tanggal Eksekusi QA | **25 Oktober 2026 WIB** |
 | Pelaksana / Reviewer | Si Paling Marketing (Hermes Agent `@bebo`) |
 
 ---
@@ -29,13 +29,13 @@ Dokumen ini adalah lembar hasil QA resmi implementasi autentikasi multi-role (AD
 |---|---|---|---|---|
 | **TECH-01** | TypeScript Typecheck | `npm run typecheck` (`tsc --noEmit`) | 0 error, exit code 0 | **LULUS** |
 | **TECH-02** | ESLint Code Quality | `npm run lint` (`eslint .`) | 0 error, 0 warning, exit code 0 | **LULUS** |
-| **TECH-03** | Unit & Logic Tests | `npm run test` (`vitest run`) | 5 test files, 46 tests passed (1.55s) | **LULUS** |
-| **TECH-04** | Standalone Production Build | `npm run build` | Next.js standalone bundle compiled successfully | **LULUS** |
-| **TECH-05** | Browser E2E Suite | `npx playwright test` | 5 spec files, 34 tests passed (46.8s) | **LULUS** |
+| **TECH-03** | Unit & Logic Tests | `npm run test` (`vitest run`) | 11 test files, 124 tests passed (1.68s) | **LULUS** |
+| **TECH-04** | Standalone Production Build | `npm run build` | Next.js standalone bundle compiled successfully (`postbuild` static assets copied) | **LULUS** |
+| **TECH-05** | Browser E2E Suite | `npx playwright test` | 7 spec files, 40 tests passed (55.5s) | **LULUS** |
 
 ---
 
-## 3. Matriks Hasil Pengujian Fungsional & Keamanan (34 Skenario E2E)
+## 3. Matriks Hasil Pengujian Fungsional & Keamanan (40 Skenario E2E)
 
 ### A. Autentikasi & Otorisasi Admin (`e2e/auth.spec.ts`)
 
@@ -52,7 +52,7 @@ Dokumen ini adalah lembar hasil QA resmi implementasi autentikasi multi-role (AD
 |---|---|---|---|
 | **MKT-01** | Login Marketing (Yunus) | Berhasil login dengan kredensial Marketer, dialihkan ke `/dashboard` | **LULUS** |
 | **MKT-02** | Heading & Role Tag | Menampilkan "Dashboard marketing" dan badge `ROLE: MARKETER` | **LULUS** |
-| **MKT-03** | Pembatasan Navigasi Sidebar | Sidebar hanya berisi tepat 6 link (Dashboard, Sekolah & peluang, Pipeline, Tindak lanjut, Aktivitas, Laporan); Pengaturan tidak ada | **LULUS** |
+| **MKT-03** | Pembatasan Navigasi Sidebar | Sidebar hanya berisi tepat 6 link (Dashboard, Sekolah & peluang, Pipeline, Tindak lanjut, Aktivitas, Laporan); Pengaturan & Member tidak ada | **LULUS** |
 | **MKT-04** | Proteksi Rute Langsung `/settings` | Akses langsung ke `/settings` ditolak server dengan HTTP 403 Forbidden ("Akses ditolak") | **LULUS** |
 | **MKT-05** | Proteksi Rute Langsung `/admin` | Akses langsung ke `/admin` ditolak server dengan HTTP 403 Forbidden ("Akses ditolak") | **LULUS** |
 | **MKT-06** | Anti-Credential Hint | Halaman login bersih dari saran kredensial atau password bawaan di DOM | **LULUS** |
@@ -87,8 +87,27 @@ Dokumen ini adalah lembar hasil QA resmi implementasi autentikasi multi-role (AD
 | **PUB-03** | Keamanan data publik | Halaman publik bebas cookie sesi CRM dan memiliki header pembatas indexing yang tepat | **LULUS** |
 | **PUB-04** | Aksesibilitas halaman publik | Lolos audit axe accessibility otomatis di 390px dan 1440px | **LULUS** |
 
+### F. Manajemen Member Marketing (`e2e/members.spec.ts`)
+
+| ID | Skenario | Hasil Verifikasi | Status |
+|---|---|---|---|
+| **MEM-01** | CRUD Member Marketing Admin | Admin menambah member baru dengan avatar, nama, email, dan status aktif | **LULUS** |
+| **MEM-02** | Live Avatar Preview | Pratinjau langsung avatar terpilih sebelum submit | **LULUS** |
+| **MEM-03** | Reset Password Member | Admin mereset password akun marketing dengan hash scrypt baru | **LULUS** |
+| **MEM-04** | Filter & Pembaruan Profil | Pembaruan data profil dan status keaktifan terupdate di tabel | **LULUS** |
+
+### G. Hardening Keamanan, Sesi & Integritas Relasi (`e2e/security.spec.ts`)
+
+| ID | Skenario | Hasil Verifikasi | Status |
+|---|---|---|---|
+| **SEC-01** | Restriksi Reset Global & Origin Spoofing | `DELETE /api/crm` hanya diizinkan untuk Admin, mewajibkan `MARKETING_ENABLE_SYNTHETIC_CRM=true`, dan menolak Origin palsu/cross-site dengan 403 | **LULUS** |
+| **SEC-02** | Keunikan Email & Integritas Sesi Admin | Pencegahan tabrakan email lintas registry aktif/nonaktif/admin (400) tanpa merusak sesi Admin | **LULUS** |
+| **SEC-03** | Form State Persistence & PATCH Atomik | Form modal member tetap terbuka pada kegagalan validasi; perubahan tidak parsial | **LULUS** |
+| **SEC-04** | Pencabutan Sesi Seketika (Session Revocation) | Reset password atau perubahan email/status merotasi `sessionVersion`; sesi HTTP lama ditolak (401) dan browser terlempar kembali ke login | **LULUS** |
+| **SEC-05** | Proteksi Relasi Peluang & Aktivitas (RESTRICT) | Upaya menghapus atau menonaktifkan member berelasi ditolak dengan HTTP 409 Conflict; fail-closed 503 saat CRM unavailable; member tanpa relasi berhasil dihapus (200) | **LULUS** |
+
 ---
 
 ## 4. Kesimpulan QA
 
-Implementasi **Autentikasi Multi-Role & Isolasi Server-Side v0.8** telah teruji secara komprehensif dan dinyatakan **LULUS** di seluruh kriteria penerimaan teknis, fungsionalitas, keamanan rute, dan perlindungan isolasi data. Aplikasi siap digunakan untuk peninjauan lokal tim dan demonstrasi alur operasional.
+Implementasi **Autentikasi Multi-Role, Manajemen Member & Hardening Keamanan v0.11** telah teruji secara komprehensif dan dinyatakan **LULUS** di seluruh kriteria penerimaan teknis, fungsionalitas, keamanan rute, perlindungan isolasi data, pencabutan sesi, dan integritas referensial. Aplikasi siap digunakan untuk peninjauan lokal tim dan demonstrasi operasional yang aman.

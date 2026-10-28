@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
 export type UserRole = "ADMIN" | "MANAGER" | "MARKETER";
@@ -11,6 +11,9 @@ export interface AuthUser {
   name: string;
   role: "ADMIN" | "MANAGER" | "MARKETER";
   isActive: boolean;
+  phone?: string;
+  avatarUrl?: string;
+  title?: string;
 }
 
 export interface SessionPayload {
@@ -20,6 +23,7 @@ export interface SessionPayload {
   role: UserRole;
   exp: number; // Unix timestamp in seconds
   iat: number;
+  sessionVersion: string;
 }
 
 export const SESSION_COOKIE_NAME = "sk_mkt_session";
@@ -45,10 +49,80 @@ function isDemoAuthEnabled(): boolean {
   return process.env.MARKETING_ENABLE_DEMO_AUTH === "true";
 }
 
-export type RegisteredUser = AuthUser & { password?: string; passwordHash?: string };
+export type RegisteredUser = AuthUser & { password?: string; passwordHash?: string; sessionVersion?: string };
+export type AccountProfileUpdate = Partial<Pick<AuthUser, "name" | "email" | "phone" | "title" | "avatarUrl">>;
+type ConfiguredAccountOverride = { source: string; updates: AccountProfileUpdate & { passwordHash?: string; sessionVersion: string } };
+declare global {
+  var __SATUKELAS_ACCOUNT_OVERRIDES__: Map<string, ConfiguredAccountOverride> | undefined;
+}
+
+export function updateConfiguredAccount(id: string, data: AccountProfileUpdate & { passwordHash?: string }) {
+  const entries = JSON.parse(process.env.MARKETING_USERS_JSON ?? "[]") as RegisteredUser[];
+  const source = entries.find(entry => entry.id === id);
+  if (!source) throw new Error("Akun tidak ditemukan.");
+  const store = globalThis.__SATUKELAS_ACCOUNT_OVERRIDES__ ??= new Map();
+  const previous = store.get(id);
+  const signature = JSON.stringify(source);
+  store.set(id, { source: signature, updates: { ...(previous?.source === signature ? previous.updates : {}), ...data, sessionVersion: randomUUID() } });
+}
+
+declare global {
+  var __SATUKELAS_ADMIN_OVERRIDE__: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    avatarUrl?: string;
+    title?: string;
+    passwordHash?: string;
+    sessionVersion?: string;
+  } | undefined;
+}
+
+export function getAdminProfile() {
+  const adminEmail = (process.env.ADMIN_EMAIL || "admin@satukelas.com").toLowerCase().trim();
+  const override = globalThis.__SATUKELAS_ADMIN_OVERRIDE__ || {};
+  return {
+    id: "usr_admin_01",
+    name: override.name || "Administrator Satukelas",
+    email: override.email || adminEmail,
+    role: "ADMIN" as const,
+    phone: override.phone ?? "",
+    title: override.title ?? "Administrator Sistem",
+    avatarUrl: override.avatarUrl,
+    isActive: true,
+  };
+}
+
+export function updateAdminProfile(data: { name?: string; email?: string; phone?: string; avatarUrl?: string; title?: string }) {
+  if (!globalThis.__SATUKELAS_ADMIN_OVERRIDE__) {
+    globalThis.__SATUKELAS_ADMIN_OVERRIDE__ = {};
+  }
+  if (data.name !== undefined) globalThis.__SATUKELAS_ADMIN_OVERRIDE__.name = data.name.trim();
+  if (data.email !== undefined) globalThis.__SATUKELAS_ADMIN_OVERRIDE__.email = data.email.toLowerCase().trim();
+  if (data.phone !== undefined) globalThis.__SATUKELAS_ADMIN_OVERRIDE__.phone = data.phone.trim();
+  if (data.title !== undefined) globalThis.__SATUKELAS_ADMIN_OVERRIDE__.title = data.title.trim();
+  if (data.avatarUrl !== undefined) globalThis.__SATUKELAS_ADMIN_OVERRIDE__.avatarUrl = data.avatarUrl ? data.avatarUrl.trim() : undefined;
+  globalThis.__SATUKELAS_ADMIN_OVERRIDE__.sessionVersion = randomUUID();
+  return getAdminProfile();
+}
+
+export function updateAdminPassword(newPassword: string) {
+  if (!globalThis.__SATUKELAS_ADMIN_OVERRIDE__) {
+    globalThis.__SATUKELAS_ADMIN_OVERRIDE__ = {};
+  }
+  globalThis.__SATUKELAS_ADMIN_OVERRIDE__.passwordHash = hashPassword(newPassword);
+  globalThis.__SATUKELAS_ADMIN_OVERRIDE__.sessionVersion = randomUUID();
+  return getAdminProfile();
+}
+
+export function resetAdminOverride() {
+  globalThis.__SATUKELAS_ADMIN_OVERRIDE__ = undefined;
+  globalThis.__SATUKELAS_ACCOUNT_OVERRIDES__ = undefined;
+}
 
 export function getRegisteredUsers(): RegisteredUser[] {
-  const adminEmail = (process.env.ADMIN_EMAIL || "admin@satukelas.com").toLowerCase().trim();
+  const adminOverride = globalThis.__SATUKELAS_ADMIN_OVERRIDE__;
+  const adminEmail = (adminOverride?.email || process.env.ADMIN_EMAIL || "admin@satukelas.com").toLowerCase().trim();
   const adminPassword = process.env.ADMIN_PASSWORD || "AdminSatukelas2026!";
 
   const demoMembers = isDemoAuthEnabled() ? getMarketingMembers() : [];
@@ -57,10 +131,15 @@ export function getRegisteredUsers(): RegisteredUser[] {
     {
       id: "usr_admin_01",
       email: adminEmail,
-      name: "Administrator Satukelas",
+      name: adminOverride?.name || "Administrator Satukelas",
       role: "ADMIN",
       isActive: true,
-      password: adminPassword,
+      phone: adminOverride?.phone ?? "",
+      avatarUrl: adminOverride?.avatarUrl,
+      title: adminOverride?.title ?? "Administrator Sistem",
+      password: adminOverride?.passwordHash ? undefined : adminPassword,
+      passwordHash: adminOverride?.passwordHash,
+      sessionVersion: adminOverride?.sessionVersion || "v_admin_01",
     },
     {
       id: "usr_mgr_01",
@@ -76,11 +155,14 @@ export function getRegisteredUsers(): RegisteredUser[] {
       name: m.name,
       role: "MARKETER" as const,
       isActive: m.isActive,
-      password: m.rawPassword,
+      phone: m.phone,
+      avatarUrl: m.avatarUrl,
+      title: m.title,
       passwordHash: m.passwordHash,
+      sessionVersion: m.sessionVersion,
     })),
   ];
-  const enabled = users.filter((user) => isDemoAuthEnabled() || (user.role === "ADMIN" && process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD));
+  const enabled = users.filter((user) => isDemoAuthEnabled() || (user.role === "ADMIN" && ((process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) || adminOverride)));
   try {
     const entries: unknown = JSON.parse(process.env.MARKETING_USERS_JSON ?? "[]");
     if (!Array.isArray(entries)) return [];
@@ -90,9 +172,11 @@ export function getRegisteredUsers(): RegisteredUser[] {
       const { id, email, name, passwordHash, isActive } = entry;
       if (!isValidId(id) || !isValidEmail(email) || !isValidName(name) ||
           typeof isActive !== "boolean" || !isValidPasswordHash(passwordHash)) return [];
+      const override = globalThis.__SATUKELAS_ACCOUNT_OVERRIDES__?.get(id);
       configured.push({
         id, email: email.toLowerCase().trim(), name: name.trim(),
         role: "MARKETER", passwordHash, isActive,
+        ...(override?.source === JSON.stringify(entry) ? override.updates : {}),
       });
     }
     const registered = [...enabled, ...configured];
@@ -155,10 +239,18 @@ function base64UrlDecode(str: string): string {
 /**
  * Membuat token sesi bertanda tangan HMAC-SHA256 (payload tidak terenkripsi).
  */
-export function signSessionToken(payload: Omit<SessionPayload, "iat" | "exp">, durationSeconds = SESSION_DURATION_SECONDS): string {
+function accountSessionVersion(account: RegisteredUser): string {
+  return createHmac("sha256", getSecret()).update(JSON.stringify([
+    account.id, account.email, account.role, account.passwordHash ?? account.password, account.sessionVersion,
+  ])).digest("hex");
+}
+
+export function signSessionToken(payload: Omit<SessionPayload, "iat" | "exp" | "sessionVersion">, durationSeconds = SESSION_DURATION_SECONDS): string {
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + durationSeconds;
-  const fullPayload: SessionPayload = { ...payload, iat, exp };
+  const account = getRegisteredUsers().find(user => user.id === payload.userId);
+  const sessionVersion = account ? accountSessionVersion(account) : "unregistered";
+  const fullPayload: SessionPayload = { ...payload, sessionVersion, iat, exp };
 
   const payloadString = JSON.stringify(fullPayload);
   const encodedPayload = base64UrlEncode(payloadString);
@@ -208,7 +300,8 @@ export function verifySessionToken(token: string): SessionPayload | null {
         payload.iat > now || payload.exp <= payload.iat) return null;
 
     const account = getRegisteredUsers().find((user) => user.id === payload.userId);
-    if (!account?.isActive || account.role !== payload.role || account.email !== payload.email) return null;
+    if (!account?.isActive || account.role !== payload.role || account.email !== payload.email ||
+        typeof payload.sessionVersion !== "string" || payload.sessionVersion !== accountSessionVersion(account)) return null;
     return { ...payload, name: account.name };
   } catch {
     return null;
