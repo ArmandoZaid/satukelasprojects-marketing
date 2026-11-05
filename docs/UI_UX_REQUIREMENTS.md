@@ -1,9 +1,27 @@
 # UI/UX Requirements — Satukelas Marketing CRM
 
-**Versi:** 0.13: Generator Kartu Nama Web Admin, Pengaturan Akun, dan Landing Member Tanpa Grid Statis/Bundling
-**Status:** implementasi generator kartu nama otomatis (`MKT-S15`), panel pengaturan akun & ganti password pengguna (`MKT-S16`), serta landing member tanpa katalog produk statis dan bundling. Penegasan: tidak ada formulir pendaftaran magang. Hasil uji tercatat di [QA Member Landing](QA_MEMBER_LANDING.md).
+**Versi:** 0.15: Mode Operasional PostgreSQL Persisten (WIB Dinamis) & Kesiapan Docker/Dokploy; UI fitur v0.13 tetap berlaku
+**Status PostgreSQL & Docker v0.15:** terverifikasi penuh pada PostgreSQL 16 nyata dan container Docker lokal; hasil pengujian tercatat di [QA Docker](QA_DOCKER.md). Siap untuk dideploy ke VPS Dokploy.
+**Status fitur aplikasi v0.13:** implementasi generator kartu nama otomatis (`MKT-S15`), panel pengaturan akun & ganti password pengguna (`MKT-S16`), serta landing member tanpa katalog produk statis dan bundling. Penegasan: tidak ada formulir pendaftaran magang. Hasil uji tercatat di [QA Member Landing](QA_MEMBER_LANDING.md).
 **Pasangan:** [PRD](PRD.md) · [ERD](ERD.md)
 **Mode pengalaman:** **Operate** untuk ruang kerja CRM; **Persuade / recruitment** untuk MKT-S13; **Personal Sales & Showcase** untuk landing profil member MKT-S14 (`/tim/[slug]`, `/m/[slug]`); **Digital & Physical Identity** untuk Generator Kartu Nama MKT-S15; **Self-Service Account Management** untuk Pengaturan Akun MKT-S16.
+
+### Kontrak integrasi PostgreSQL v0.15 (implementasi dan verifikasi berjalan)
+
+- PostgreSQL menjadi sumber data akun, profil, hash password, versi sesi, member, peluang/sekolah dan aktivitas; tidak ada fallback memori ketika database dikonfigurasi namun gagal.
+- Pertahankan custom auth HMAC/scrypt; gunakan Drizzle dan driver `pg`. Migrasi SQL versioned/checksummed dan bootstrap admin idempoten, tanpa menimpa akun setelah restart.
+- Mulai database baru dengan satu admin dan tanpa dataset sintetis. Data demo lama tidak diimpor otomatis.
+- `users` menyatukan akun/admin/member; `opportunities` menyimpan identitas sekolah sesuai kontrak UI existing; `activities` terhubung peluang/pemilik. Tidak menambahkan tabel sekolah terpisah yang belum dipakai aplikasi.
+- Mutasi multi-record bersifat transaksional; constraint email unik, relasi FK, serta lock lintas mutasi akun/CRM mencegah partial write dan race penghapusan/pembuatan peluang.
+- Setiap request memverifikasi status akun dan versi sesi dari database. Profil/password berubah mencabut sesi lama dan menerbitkan cookie baru untuk pemanggil.
+- Hak akses ADMIN/MARKETER dan kepemilikan `ownerId` tetap berlaku. Reset seluruh CRM produksi ditolak. Alamat internal/hash password/versi sesi tidak dikirim ke publik.
+- UI mode PostgreSQL menampilkan penyimpanan persisten dan tanggal WIB saat ini, bukan tanggal acuan atau label data contoh. Preview/demo eksplisit mempertahankan perilaku historis.
+- `/api/health` tetap liveness; `/api/ready` memeriksa koneksi, schema dan admin tersedia tanpa mengungkap kredensial. Startup container menunggu migrasi/bootstrap berhasil sebelum melayani request.
+- Penerimaan: uji CRUD/auth/isolasi/konkurensi terhadap PostgreSQL nyata, restart/recreate aplikasi dan restart database, backup/restore disposable, build dan regresi. Belum merupakan bukti deployment VPS.
+
+### Batas pengalaman deployment Docker (riwayat v0.14)
+
+Tidak ada perubahan visual dalam setup container. Mode default tidak menawarkan akun demo atau preview anonim. Konfigurasi runtime yang invalid menghentikan container dengan pesan nama variabel saja, tanpa nilainya. `/api/health` hanya untuk pemeriksaan liveness, bukan indikator kesiapan CRM produksi; layanan CRM yang belum dikonfigurasi tetap menampilkan kegagalan yang benar, bukan data bisnis palsu. Local override boleh memakai HTTP loopback dengan secure cookie nonaktif; Dokploy HTTPS memakai secure cookie aktif. `APP_ORIGIN` mengikat mutasi ke origin publik yang dikonfigurasi operator. Saat CRM operasional belum tersedia, seluruh layout admin (termasuk pengaturan) belum dapat dirender; ini blocker aplikasi yang belum diberi UI pemulihan khusus, bukan indikator keberhasilan workspace.
 
 ### Kontak member marketing — admin
 

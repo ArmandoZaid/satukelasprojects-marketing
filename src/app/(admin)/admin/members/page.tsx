@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { requireAdminSession } from "@/lib/auth";
+import { requireRuntimeAdminSession } from "@/lib/runtime-auth";
 
 export default async function AdminMembersRedirectPage() {
-  const admin = await requireAdminSession();
+  const admin = await requireRuntimeAdminSession();
   if (!admin) redirect("/dashboard");
   redirect("/members");
 }

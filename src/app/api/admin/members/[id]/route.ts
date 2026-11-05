@@ -8,7 +8,10 @@ import {
   getMarketingMemberById,
   MarketingMember,
 } from "@/lib/member-store";
-import { readCrmStore } from "@/lib/crm-store";
+import { isDatabaseConfigured } from "@/lib/db/client";
+import { deleteDbMember, getDbMemberById, updateDbMember } from "@/lib/persistent-accounts";
+import { getRuntimeSession } from "@/lib/runtime-auth";
+import { readRuntimeCrm } from "@/lib/runtime-crm";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +33,7 @@ function sanitizeMember(member: MarketingMember, prospectsCount = 0) {
 }
 
 async function requireAdmin() {
-  const session = await getServerSession();
+  const session = isDatabaseConfigured() ? await getRuntimeSession() : await getServerSession();
   if (!session) {
     throw new CrmDataError("Sesi tidak ditemukan atau kedaluwarsa.", 401);
   }
@@ -71,6 +74,7 @@ function handleApiError(error: unknown) {
   }
   const message = error instanceof Error ? error.message : "Terjadi kesalahan internal server.";
   const status = message.toLowerCase().includes("tidak ditemukan") ? 404 : 400;
+  if (isDatabaseConfigured() && error instanceof CrmDataError && error.status === 409 && !error.message.includes("prospek")) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ error: message }, { status });
 }
 
@@ -79,10 +83,10 @@ export async function PATCH(
   props: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin();
     const { id } = await props.params;
 
-    const existing = getMarketingMemberById(id);
+    const existing = isDatabaseConfigured() ? await getDbMemberById(id) : getMarketingMemberById(id);
     if (!existing) {
       throw new CrmDataError("Member marketing tidak ditemukan.", 404);
     }
@@ -107,16 +111,16 @@ export async function PATCH(
     }
     if (body.isActive !== undefined) updatePayload.isActive = Boolean(body.isActive);
 
-    const updated = updateMarketingMember(id, updatePayload);
+    const updated = isDatabaseConfigured() ? await updateDbMember(id, updatePayload) : updateMarketingMember(id, updatePayload);
 
     let crmData;
     try {
-      crmData = readCrmStore();
+      crmData = await readRuntimeCrm(session);
     } catch {
       crmData = null;
     }
     const count = crmData?.opportunities
-      ? crmData.opportunities.filter((o) => o.ownerId === id || o.owner.toLowerCase() === updated.name.toLowerCase()).length
+      ? crmData.opportunities.filter((o) => o.ownerId ? o.ownerId === id : o.owner.toLowerCase() === updated.name.toLowerCase()).length
       : 0;
 
     return NextResponse.json(
@@ -144,12 +148,12 @@ export async function DELETE(
       throw new CrmDataError("Akun Administrator tidak dapat dihapus melalui manajemen member marketing.", 400);
     }
 
-    const existing = getMarketingMemberById(id);
+    const existing = isDatabaseConfigured() ? await getDbMemberById(id) : getMarketingMemberById(id);
     if (!existing) {
       throw new CrmDataError("Member marketing tidak ditemukan.", 404);
     }
 
-    const result = deleteMarketingMember(id);
+    const result = isDatabaseConfigured() ? await deleteDbMember(id) : deleteMarketingMember(id);
 
     return NextResponse.json(
       { success: true, deletedId: result.deletedId },

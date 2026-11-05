@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "./auth";
+import { isDatabaseConfigured } from "./db/client";
+import { getRuntimeSession } from "./runtime-auth";
 import { CrmDataError } from "./crm-data";
 export async function crmIdentity() {
- const session = await getServerSession();
+ const session = isDatabaseConfigured() ? await getRuntimeSession() : await getServerSession();
  if (!session) throw new CrmDataError("Sesi tidak ditemukan atau kedaluwarsa.", 401);
  if (!["ADMIN", "MARKETER"].includes(session.role)) throw new CrmDataError("Akses ditolak.", 403);
  return session;
@@ -19,7 +21,16 @@ export function isAllowedOrigin(origin: string | null, request: Request): boolea
  try {
   const originUrl = new URL(origin);
   const reqUrl = new URL(request.url);
-  if (!["http:", "https:"].includes(originUrl.protocol) || origin !== originUrl.origin || originUrl.protocol !== reqUrl.protocol) return false;
+  if (!["http:", "https:"].includes(originUrl.protocol) || origin !== originUrl.origin) return false;
+  // Only an operator-configured origin may bridge a port map or TLS proxy.
+  // Host and forwarding headers are request input, not an allowlist.
+  const configured = process.env.APP_ORIGIN;
+  if (configured) {
+   const publicUrl = new URL(configured);
+   if (!["http:", "https:"].includes(publicUrl.protocol) || configured !== publicUrl.origin) return false;
+   return origin === configured;
+  }
+  if (originUrl.protocol !== reqUrl.protocol) return false;
   if (originUrl.origin === reqUrl.origin) return true;
   const isLoopbackOrigin = originUrl.hostname === "127.0.0.1" || originUrl.hostname === "localhost";
   const isLoopbackReq = reqUrl.hostname === "127.0.0.1" || reqUrl.hostname === "localhost";

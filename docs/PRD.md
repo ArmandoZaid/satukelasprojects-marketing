@@ -1,12 +1,35 @@
 # PRD — Satukelas Marketing CRM
 
-**Versi:** 0.13: Kartu Nama Otomatis Web Admin, Pengaturan Akun Pengguna, dan Landing Member Tanpa Katalog/Bundling Statis
-**Status:** implementasi fitur kartu nama otomatis (`MKT-FR-022`), pengaturan akun profil & password pengguna (`MKT-FR-023`) pada web admin CRM, serta pemeliharaan landing profil member (`/tim/[slug]` & `/m/[slug]`) tanpa grid produk statis dan tanpa bundling. Penegasan: tidak ada fitur atau formulir pendaftaran magang. Hasil uji tercatat pada [QA Member Landing](QA_MEMBER_LANDING.md).
+**Versi:** 0.15: Integrasi PostgreSQL Operasional, Migrasi Otomatis, dan Kesiapan Docker/Dokploy; fitur aplikasi v0.13 tetap berlaku
+**Status PostgreSQL & Docker v0.15:** terverifikasi penuh pada PostgreSQL 16 nyata dan container Docker lokal (termasuk ketahanan lintas `--force-recreate` dan `pg_dump` backup/restore); hasil pengujian tercatat di [QA Docker](QA_DOCKER.md). Siap untuk dideploy ke VPS Dokploy.
+**Status fitur aplikasi v0.13:** implementasi fitur kartu nama otomatis (`MKT-FR-022`), pengaturan akun profil & password pengguna (`MKT-FR-023`) pada web admin CRM, serta pemeliharaan landing profil member (`/tim/[slug]` & `/m/[slug]`) tanpa grid produk statis dan tanpa bundling. Penegasan: tidak ada fitur atau formulir pendaftaran magang. Hasil uji tercatat pada [QA Member Landing](QA_MEMBER_LANDING.md).
 **Bahasa / zona waktu / mata uang:** Indonesia / Asia/Jakarta (WIB) / IDR
 **Pemilik produk:** perwakilan Satukelas Projects (nama penanggung jawab perlu ditetapkan)  
 **Pembaca:** pemilik bisnis, tim marketing, desainer, developer, QA, dan pengelola VPS
 
 Dokumen pasangan: [ERD](ERD.md) · [UI/UX Requirements](UI_UX_REQUIREMENTS.md). Ketiganya merupakan satu kontrak pengembangan. Dokumen website publik di `../PRD.md`, `../ERD.md`, dan `../UI_UX_REQUIREMENTS.md` tidak digantikan oleh paket ini.
+
+### Kontrak integrasi PostgreSQL v0.15 (implementasi dan verifikasi berjalan)
+
+- PostgreSQL menjadi sumber data akun, profil, hash password, versi sesi, member, peluang/sekolah dan aktivitas; tidak ada fallback memori ketika database dikonfigurasi namun gagal.
+- Pertahankan custom auth HMAC/scrypt; gunakan Drizzle dan driver `pg`. Migrasi SQL versioned/checksummed dan bootstrap admin idempoten, tanpa menimpa akun setelah restart.
+- Mulai database baru dengan satu admin dan tanpa dataset sintetis. Data demo lama tidak diimpor otomatis.
+- `users` menyatukan akun/admin/member; `opportunities` menyimpan identitas sekolah sesuai kontrak UI existing; `activities` terhubung peluang/pemilik. Tidak menambahkan tabel sekolah terpisah yang belum dipakai aplikasi.
+- Mutasi multi-record bersifat transaksional; constraint email unik, relasi FK, serta lock lintas mutasi akun/CRM mencegah partial write dan race penghapusan/pembuatan peluang.
+- Setiap request memverifikasi status akun dan versi sesi dari database. Profil/password berubah mencabut sesi lama dan menerbitkan cookie baru untuk pemanggil.
+- Hak akses ADMIN/MARKETER dan kepemilikan `ownerId` tetap berlaku. Reset seluruh CRM produksi ditolak. Alamat internal/hash password/versi sesi tidak dikirim ke publik.
+- UI mode PostgreSQL menampilkan penyimpanan persisten dan tanggal WIB saat ini, bukan tanggal acuan atau label data contoh. Preview/demo eksplisit mempertahankan perilaku historis.
+- `/api/health` tetap liveness; `/api/ready` memeriksa koneksi, schema dan admin tersedia tanpa mengungkap kredensial. Startup container menunggu migrasi/bootstrap berhasil sebelum melayani request.
+- Penerimaan: uji CRUD/auth/isolasi/konkurensi terhadap PostgreSQL nyata, restart/recreate aplikasi dan restart database, backup/restore disposable, build dan regresi. Belum merupakan bukti deployment VPS.
+
+### Kontrak container Docker / Dokploy (riwayat v0.14)
+
+- Tahap ini menyiapkan build dan runtime container, bukan migrasi database atau deployment VPS. Gunakan Node.js 24, output standalone, user non-root, healthcheck HTTP, dan secret autentikasi yang hanya diberikan saat runtime.
+- Konfigurasi default menonaktifkan demo auth, CRM sintetis dan preview anonim; admin bootstrap dan secret wajib valid sebelum server mulai. Compose tidak membuka port aplikasi/database ke internet; override lokal hanya bind aplikasi ke loopback.
+- `APP_ORIGIN` wajib berupa origin publik kanonik tanpa trailing slash/path; pencocokan ini mengizinkan port mapping dan TLS termination tanpa mempercayai header Host/forwarding dari request. Mode direct-server non-container mempertahankan pemeriksaan same-origin lama bila variabel kosong.
+- Dokploy menangani domain/HTTPS melalui Traefik, tanpa Nginx/Caddy tambahan. PostgreSQL opsional melalui profile `database`, memakai named volume dan tanpa port host. Aplikasi belum memakai database tersebut.
+- GET `/api/health` adalah liveness tanpa autentikasi, no-store dan tanpa data sensitif. HTTP 200 tidak menyatakan CRM/database siap produksi. CRM operasional tetap 503 ketika mode sintetis nonaktif dan persistence belum tersedia. Halaman admin juga belum dapat dirender karena layout membaca CRM; UI pemulihan operasional belum termasuk setup container.
+- Kriteria penerimaan: build image berhasil, runtime non-root healthy, aset statis dan login teruji, konfigurasi kosong gagal tertutup, demo nonaktif, serta jaringan/volume database tervalidasi. Panduan ada di [Docker & Dokploy](DOCKER_DOKPLOY.md).
 
 ### Penambahan kontak member marketing — admin
 

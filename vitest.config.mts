@@ -7,5 +7,9 @@ export default defineConfig({
       "server-only": fileURLToPath(new URL("./src/shims/server-only.ts", import.meta.url)),
     },
   },
-  test: { environment: "node", include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    exclude: ["src/lib/postgres.integration.test.ts"],
+  },
 });

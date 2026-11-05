@@ -1,0 +1,8 @@
+# Explicit local HTTP access; never use this override on Dokploy.
+services:
+  marketing-app:
+    ports:
+      - "127.0.0.1:${LOCAL_PORT:-3100}:3000"
+    environment:
+      USE_SECURE_COOKIES: "false"
+      APP_ORIGIN: "http://127.0.0.1:${LOCAL_PORT:-3100}"

@@ -245,10 +245,10 @@ function accountSessionVersion(account: RegisteredUser): string {
   ])).digest("hex");
 }
 
-export function signSessionToken(payload: Omit<SessionPayload, "iat" | "exp" | "sessionVersion">, durationSeconds = SESSION_DURATION_SECONDS): string {
+export function signSessionToken(payload: Omit<SessionPayload, "iat" | "exp" | "sessionVersion">, durationSeconds = SESSION_DURATION_SECONDS, registry?: readonly RegisteredUser[]): string {
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + durationSeconds;
-  const account = getRegisteredUsers().find(user => user.id === payload.userId);
+  const account = (registry ?? getRegisteredUsers()).find(user => user.id === payload.userId);
   const sessionVersion = account ? accountSessionVersion(account) : "unregistered";
   const fullPayload: SessionPayload = { ...payload, sessionVersion, iat, exp };
 
@@ -265,7 +265,7 @@ export function signSessionToken(payload: Omit<SessionPayload, "iat" | "exp" | "
 /**
  * Memverifikasi tanda tangan dan klaim token sesi.
  */
-export function verifySessionToken(token: string): SessionPayload | null {
+export function verifySessionToken(token: string, registry?: readonly RegisteredUser[]): SessionPayload | null {
   if (!token || typeof token !== "string" || !token.includes(".")) {
     return null;
   }
@@ -299,7 +299,7 @@ export function verifySessionToken(token: string): SessionPayload | null {
         typeof payload.iat !== "number" || !Number.isFinite(payload.iat) || payload.iat < 0 ||
         payload.iat > now || payload.exp <= payload.iat) return null;
 
-    const account = getRegisteredUsers().find((user) => user.id === payload.userId);
+    const account = (registry ?? getRegisteredUsers()).find((user) => user.id === payload.userId);
     if (!account?.isActive || account.role !== payload.role || account.email !== payload.email ||
         typeof payload.sessionVersion !== "string" || payload.sessionVersion !== accountSessionVersion(account)) return null;
     return { ...payload, name: account.name };
@@ -315,7 +315,7 @@ export type AuthResult =
 /**
  * Autentikasi email dan kata sandi
  */
-export function authenticateUser(emailInput: string, passwordInput: string): AuthResult {
+export function authenticateUser(emailInput: string, passwordInput: string, registry?: readonly RegisteredUser[]): AuthResult {
   const normalizedEmail = (emailInput || "").toLowerCase().trim();
   const password = passwordInput || "";
 
@@ -327,7 +327,7 @@ export function authenticateUser(emailInput: string, passwordInput: string): Aut
     };
   }
 
-  const users = getRegisteredUsers();
+  const users = registry ?? getRegisteredUsers();
   const found = users.find((u) => u.email === normalizedEmail);
 
   if (!found) {
@@ -369,7 +369,7 @@ export function authenticateUser(emailInput: string, passwordInput: string): Aut
     email: user.email,
     name: user.name,
     role: user.role,
-  });
+  }, SESSION_DURATION_SECONDS, users);
 
   return { ok: true, user, token };
 }

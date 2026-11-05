@@ -7,7 +7,10 @@ import {
   createMarketingMember,
   MarketingMember,
 } from "@/lib/member-store";
-import { readCrmStore } from "@/lib/crm-store";
+import { isDatabaseConfigured } from "@/lib/db/client";
+import { createDbMember, getDbMembers } from "@/lib/persistent-accounts";
+import { getRuntimeSession } from "@/lib/runtime-auth";
+import { readRuntimeCrm } from "@/lib/runtime-crm";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +32,7 @@ function sanitizeMember(member: MarketingMember, prospectsCount = 0) {
 }
 
 async function requireAdmin() {
-  const session = await getServerSession();
+  const session = isDatabaseConfigured() ? await getRuntimeSession() : await getServerSession();
   if (!session) {
     throw new CrmDataError("Sesi tidak ditemukan atau kedaluwarsa.", 401);
   }
@@ -74,18 +77,18 @@ function handleApiError(error: unknown) {
 
 export async function GET() {
   try {
-    await requireAdmin();
-    const members = getMarketingMembers();
+    const session = await requireAdmin();
+    const members = isDatabaseConfigured() ? await getDbMembers() : getMarketingMembers();
     let crmData;
     try {
-      crmData = readCrmStore();
+      crmData = await readRuntimeCrm(session);
     } catch {
       crmData = null;
     }
 
     const sanitized = members.map((m) => {
       const count = crmData?.opportunities
-        ? crmData.opportunities.filter((o) => o.ownerId === m.id || o.owner.toLowerCase() === m.name.toLowerCase()).length
+        ? crmData.opportunities.filter((o) => o.ownerId ? o.ownerId === m.id : o.owner.toLowerCase() === m.name.toLowerCase()).length
         : 0;
       return sanitizeMember(m, count);
     });
@@ -110,7 +113,7 @@ export async function POST(request: Request) {
     const avatarUrl = body.avatarUrl ? String(body.avatarUrl) : undefined;
     const isActive = body.isActive !== undefined ? Boolean(body.isActive) : true;
 
-    const newMember = createMarketingMember({
+    const newMember = await (isDatabaseConfigured() ? createDbMember : createMarketingMember)({
       name,
       email,
       password,

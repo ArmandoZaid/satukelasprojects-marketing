@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
+import { isDatabaseConfigured } from "@/lib/db/client";
+import { getRuntimeSession } from "@/lib/runtime-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = await getServerSession();
+  const session = isDatabaseConfigured() ? await getRuntimeSession() : await getServerSession();
 
   if (!session) {
     return NextResponse.json(

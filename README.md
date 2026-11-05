@@ -1,12 +1,23 @@
 # Satukelas Projects — Marketing Landing & CRM Admin (Multi-Role Auth)
 
-Aplikasi Next.js terisolasi (`apps/marketing`) untuk landing kemitraan marketing publik dan CRM internal Satukelas Projects dengan otentikasi multi-role (ADMIN & MARKETER) serta isolasi data server-side.
+Aplikasi Next.js mandiri (`satukelas-marketing`) untuk landing kemitraan marketing publik dan CRM internal Satukelas Projects dengan otentikasi multi-role (ADMIN & MARKETER) serta isolasi data server-side.
 
-Acuan: `../../docs/marketing/PRD.md`, `ERD.md`, dan `UI_UX_REQUIREMENTS.md`.
+Acuan: `docs/PRD.md`, `docs/ERD.md`, dan `docs/UI_UX_REQUIREMENTS.md`.
+
+## Docker dan Dokploy
+
+Panduan lengkap: [Docker & Dokploy](docs/DOCKER_DOKPLOY.md). Dockerfile memakai Node.js 24 Alpine dan Next.js standalone non-root (`nextjs:nodejs` 1001:1001), terintegrasi penuh dengan **PostgreSQL 16** (Drizzle ORM + `pg`, migrasi SQL otomatis `migrations/0001_initial.sql`, dan bootstrap admin idempoten); Dokploy menggunakan Traefik bawaan tanpa Nginx/Caddy tambahan.
+
+```bash
+node scripts/setup-docker-env.mjs
+docker compose --env-file .env.docker -p satukelas-marketing-local -f docker-compose.yml -f docker-compose.local.yml up -d --build --wait
+```
+
+Akses lokal `http://127.0.0.1:3100`. Credential lokal dibuat acak dalam file git-ignored `.env.docker`, tidak dicetak. Seluruh akun, member marketing, peluang sekolah, dan aktivitas tindak lanjut disimpan secara persisten di PostgreSQL dan bertahan lintas restart/recreate container. Hasil uji lengkap dicatat di [QA Docker](docs/QA_DOCKER.md).
 
 ## Menjalankan secara lokal
 
-Gunakan Node.js 24/26 LTS. Dari folder `apps/marketing`:
+Gunakan Node.js 24 (selaras Dockerfile). Jalankan dari root repositori:
 
 ```bash
 # 1. Install dependencies
@@ -62,9 +73,9 @@ Saat `MARKETING_ENABLE_DEMO_AUTH=true` aktif, tersedia akun demo lokal:
 
 ## Kontak member marketing (admin)
 
-Pada `/admin/members` atau `/members`, admin dapat menambah/mengedit nomor telepon/WhatsApp dan alamat tempat tinggal. Email aktif memakai email akun yang sama untuk login (wajib, format valid, unik; belum ada verifikasi kotak masuk). Nomor telepon opsional 7–30 karakter, alamat opsional maksimal 500 karakter. Nilai kosong menghapus kontak lama; data lama yang belum punya alamat ditampilkan sebagai "Belum diisi". Alamat hanya terlihat di tabel/form admin, tidak dipublikasikan pada landing atau kartu nama.
+Pada `/admin/members` atau `/members`, admin dapat menambah/mengedit nomor telepon/WhatsApp dan alamat tempat tinggal. Email aktif memakai email akun yang sama untuk login (wajib, format valid, unik; belum ada verifikasi kotak masuk). Nomor telepon opsional 7–30 karakter, alamat opsional maksimal 500 karakter. Nilai kosong menghapus kontak lama; data lama yang belum punya alamat ditampilkan sebagai "Belum diisi". Alamat hanya terlihat di modal detail/form admin, tidak dipublikasikan pada landing atau kartu nama.
 
-**Batas penyimpanan saat ini:** registry member masih in-memory (`globalThis`), bukan database persisten. Data bertahan saat refresh halaman pada proses yang sama, tetapi hilang saat proses server restart dan tidak dibagi antar-instance. Jangan gunakan data pribadi asli sebelum penyimpanan produksi tersedia.
+**Penyimpanan data:** Pada mode produksi/Docker (saat `DATABASE_URL` atau `PGHOST` dikonfigurasi), seluruh registry member, akun, peluang, dan aktivitas disimpan secara persisten di **PostgreSQL 16** (`users`, `opportunities`, `activities`). Mode in-memory (`globalThis`) hanya digunakan saat menjalankan mode demo/sintetis lokal tanpa database.
 
 ## Verifikasi dan Pengujian Kualitas
 

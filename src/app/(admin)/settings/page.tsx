@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireAdminSession } from "@/lib/auth";
+import { requireRuntimeAdminSession } from "@/lib/runtime-auth";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminSettingsPage() {
-  const admin = await requireAdminSession();
+  const admin = await requireRuntimeAdminSession();
   if (!admin) redirect("/login");
   return null;
 }

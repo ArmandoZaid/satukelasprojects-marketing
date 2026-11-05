@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { CrmApp } from "@/components/crm/crm-app";
-import { getServerSession } from "@/lib/auth";
+import { getRuntimeSession } from "@/lib/runtime-auth";
 import "./crm.css";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export default async function PreviewLayout({
   children: React.ReactNode;
 }) {
   if (process.env.MARKETING_ENABLE_ADMIN_PREVIEW !== "true") notFound();
-  const session = await getServerSession();
+  const session = await getRuntimeSession();
   if (session && session.role !== "ADMIN") notFound();
   const currentUser =
     session && session.role === "ADMIN"

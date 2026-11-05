@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { isDatabaseConfigured } from "@/lib/db/client";
 import { getMarketingMemberBySlug } from "@/lib/member-store";
+import { getDbMemberBySlug } from "@/lib/persistent-accounts";
 import { MemberLanding } from "@/components/member-landing";
+
+export const dynamic = "force-dynamic";
 
 interface ShortMemberPageProps {
   params: Promise<{
@@ -11,7 +15,7 @@ interface ShortMemberPageProps {
 
 export async function generateMetadata({ params }: ShortMemberPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const member = getMarketingMemberBySlug(slug);
+  const member = isDatabaseConfigured() ? await getDbMemberBySlug(slug) : getMarketingMemberBySlug(slug);
 
   if (!member || !member.isActive) {
     return {
@@ -28,7 +32,7 @@ export async function generateMetadata({ params }: ShortMemberPageProps): Promis
 
 export default async function ShortMemberProfilePage({ params }: ShortMemberPageProps) {
   const { slug } = await params;
-  const member = getMarketingMemberBySlug(slug);
+  const member = isDatabaseConfigured() ? await getDbMemberBySlug(slug) : getMarketingMemberBySlug(slug);
 
   if (!member || !member.isActive) {
     notFound();

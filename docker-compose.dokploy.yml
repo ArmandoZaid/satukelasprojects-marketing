@@ -1,0 +1,11 @@
+# For Dokploy Compose only, not needed for Dokploy Applications.
+# Add a domain for marketing-app:3000 in Dokploy, then redeploy.
+services:
+  marketing-app:
+    networks:
+      - default
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true

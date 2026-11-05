@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { requireAdminSession } from "@/lib/auth";
+import { requireRuntimeAdminSession } from "@/lib/runtime-auth";
 
 export default async function AdminIndexPage() {
-  if (!await requireAdminSession()) redirect("/dashboard");
+  if (!await requireRuntimeAdminSession()) redirect("/dashboard");
   redirect("/dashboard");
 }

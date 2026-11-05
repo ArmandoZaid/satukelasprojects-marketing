@@ -1,4 +1,4 @@
-import { accountResponse, changeOwnProfile, ownAccount } from "@/lib/account";
+import { changeRuntimeOwnProfile, ownRuntimeAccount, runtimeAccountResponse } from "@/lib/account";
 import { crmError, crmIdentity, crmInput } from "@/lib/crm-http";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export async function PATCH(request: Request) {
   try {
     const session = await crmIdentity();
     const input = await crmInput(request, 3 * 1024 * 1024);
-    return accountResponse(changeOwnProfile(session, input), true);
+    return await runtimeAccountResponse(await changeRuntimeOwnProfile(session, input), true);
   } catch (error) {
     return crmError(error);
   }
@@ -17,7 +17,7 @@ export async function PATCH(request: Request) {
 export async function GET() {
   try {
     const session = await crmIdentity();
-    return accountResponse(ownAccount(session));
+    return await runtimeAccountResponse(await ownRuntimeAccount(session));
   } catch (error) {
     return crmError(error);
   }

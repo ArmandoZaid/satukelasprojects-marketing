@@ -2,6 +2,9 @@ import { authenticateUser, getRegisteredUsers, getSessionCookieOptions, hashPass
 import { CrmDataError } from "./crm-data";
 import { getMarketingMemberById, resetMemberPassword, updateMarketingMember } from "./member-store";
 import { crmResponse } from "./crm-http";
+import { isDatabaseConfigured } from "./db/client";
+import { changeDbOwnPassword, getDbUserById, updateDbOwnProfile } from "./persistent-accounts";
+import { signRuntimeSessionToken } from "./runtime-auth";
 
 function validateAccountAvatar(value: string): void {
   const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
@@ -76,4 +79,32 @@ export function changeOwnProfile(session: SessionPayload, input: Record<string, 
   else if (process.env.MARKETING_ENABLE_DEMO_AUTH === "true" && getMarketingMemberById(user.id)) updateMarketingMember(user.id, clean, true);
   else updateConfiguredAccount(user.id, clean);
   return ownAccount(session);
+}
+
+export async function ownRuntimeAccount(session: SessionPayload): Promise<RegisteredUser> {
+  if (!isDatabaseConfigured()) return ownAccount(session);
+  const user = await getDbUserById(session.userId);
+  if (!user || !user.isActive || user.role !== session.role) throw new CrmDataError("Akun tidak ditemukan atau tidak aktif.", 401);
+  return user;
+}
+
+export async function runtimeAccountResponse(user: RegisteredUser, refreshSession = false) {
+  if (!isDatabaseConfigured()) return accountResponse(user, refreshSession);
+  const response = crmResponse({ account: {
+    id: user.id, name: user.name, email: user.email, role: user.role,
+    phone: user.phone ?? "", title: user.title ?? "", avatarUrl: user.avatarUrl ?? "",
+  }, storage: "postgres" });
+  if (refreshSession) {
+    const token = await signRuntimeSessionToken({ userId: user.id, name: user.name, email: user.email, role: user.role });
+    response.cookies.set({ ...getSessionCookieOptions(), value: token });
+  }
+  return response;
+}
+
+export async function changeRuntimeOwnPassword(session: SessionPayload, input: Record<string, unknown>): Promise<RegisteredUser> {
+  return isDatabaseConfigured() ? changeDbOwnPassword(session, input) : changeOwnPassword(session, input);
+}
+
+export async function changeRuntimeOwnProfile(session: SessionPayload, input: Record<string, unknown>): Promise<RegisteredUser> {
+  return isDatabaseConfigured() ? updateDbOwnProfile(session, input) : changeOwnProfile(session, input);
 }

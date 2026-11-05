@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
-  authenticateUser,
   getSessionCookieOptions,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth";
+import { authenticateRuntimeUser } from "@/lib/runtime-auth";
 
 import { canAccessCrmScreen } from "@/lib/crm-access";
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Email dan kata sandi harus berupa teks." }, { status: 400 });
     }
 
-    const auth = authenticateUser(email, password);
+    const auth = await authenticateRuntimeUser(email, password);
     if (!auth.ok) {
       return NextResponse.json(
         { ok: false, error: auth.error, code: auth.code },

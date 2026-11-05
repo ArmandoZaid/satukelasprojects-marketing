@@ -30,9 +30,10 @@ function isSafeAvatarUrl(url: string): boolean {
   return false;
 }
 
-export function AccountSettings({ profile, onUpdated }: {
+export function AccountSettings({ profile, onUpdated, persistentStorage = false }: {
   profile: AccountProfile;
   onUpdated: (profile: AccountProfile) => void;
+  persistentStorage?: boolean;
 }) {
   const uid = useId();
   const [tab, setTab] = useState<AccountTab>("profile");
@@ -361,7 +362,7 @@ export function AccountSettings({ profile, onUpdated }: {
           </fieldset>
         </form>
       </div>
-      <p className="account-settings-runtime">Penyimpanan sementara (runtime): perubahan profil dan kata sandi akan direset saat server dimulai ulang.</p>
+      <p className="account-settings-runtime">{persistentStorage ? "Penyimpanan database PostgreSQL aktif: perubahan profil dan kata sandi disimpan persisten lintas restart container." : "Penyimpanan sementara (runtime): perubahan profil dan kata sandi akan direset saat server dimulai ulang."}</p>
     </section>
   );
 }

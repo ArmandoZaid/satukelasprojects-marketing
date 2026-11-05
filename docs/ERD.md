@@ -1,10 +1,30 @@
 # ERD — Satukelas Marketing CRM
 
-**Versi:** 0.13: Profil Member, Kartu Nama Otomatis, Pengaturan Akun, dan Batas Sumber Layanan API
-**Status:** model auth, kepemilikan `ownerId`, versi sesi, dan guard integritas tetap berlaku. Menambahkan dukungan penyimpanan atribut profil PIC (`phone`, `title`), override akun profil admin (`globalThis.__SATUKELAS_ADMIN_OVERRIDE__`), serta kontrak API `/api/account` dan `/api/account/password`. Menegaskan tidak ada model atau tabel formulir magang. Hasil uji lokal ada di [QA Member Landing](QA_MEMBER_LANDING.md).
+**Versi:** 0.15: Skema PostgreSQL Operasional (`users`, `opportunities`, `activities`), Transaksi & Migrasi; model profil dan API v0.13 tetap berlaku
+**Status PostgreSQL & Docker v0.15:** terverifikasi penuh pada PostgreSQL 16 nyata dan container Docker lokal; hasil pengujian tercatat di [QA Docker](QA_DOCKER.md). Siap untuk dideploy ke VPS Dokploy.
+**Status fitur aplikasi v0.13:** model auth, kepemilikan `ownerId`, versi sesi, dan guard integritas tetap berlaku. Menambahkan dukungan penyimpanan atribut profil PIC (`phone`, `title`), override akun profil admin (`globalThis.__SATUKELAS_ADMIN_OVERRIDE__`), serta kontrak API `/api/account` dan `/api/account/password`. Menegaskan tidak ada model atau tabel formulir magang. Hasil uji lokal ada di [QA Member Landing](QA_MEMBER_LANDING.md).
 **Acuan:** [PRD](PRD.md) · [UI/UX Requirements](UI_UX_REQUIREMENTS.md)
 
-Model ini untuk CRM internal single-company beserta batas landing publik rekrutmen mitra/anggota tim marketing Satukelas Projects dan landing profil personal marketing, bukan pengganti ERD website company profile existing. Tabel auth dikelola Better Auth / registry internal server; data domain dikelola aplikasi melalui Drizzle ORM.
+Model ini untuk CRM internal single-company beserta batas landing publik rekrutmen mitra/anggota tim marketing Satukelas Projects dan landing profil personal marketing, bukan pengganti ERD website company profile existing. Implementasi saat ini menggunakan custom auth dan registry internal in-memory. Better Auth/Drizzle dan tabel PostgreSQL yang dijelaskan pada rancangan adalah target produksi, belum data layer yang berjalan.
+
+### Kontrak integrasi PostgreSQL v0.15 (implementasi dan verifikasi berjalan)
+
+- PostgreSQL menjadi sumber data akun, profil, hash password, versi sesi, member, peluang/sekolah dan aktivitas; tidak ada fallback memori ketika database dikonfigurasi namun gagal.
+- Pertahankan custom auth HMAC/scrypt; gunakan Drizzle dan driver `pg`. Migrasi SQL versioned/checksummed dan bootstrap admin idempoten, tanpa menimpa akun setelah restart.
+- Mulai database baru dengan satu admin dan tanpa dataset sintetis. Data demo lama tidak diimpor otomatis.
+- `users` menyatukan akun/admin/member; `opportunities` menyimpan identitas sekolah sesuai kontrak UI existing; `activities` terhubung peluang/pemilik. Tidak menambahkan tabel sekolah terpisah yang belum dipakai aplikasi.
+- Mutasi multi-record bersifat transaksional; constraint email unik, relasi FK, serta lock lintas mutasi akun/CRM mencegah partial write dan race penghapusan/pembuatan peluang.
+- Setiap request memverifikasi status akun dan versi sesi dari database. Profil/password berubah mencabut sesi lama dan menerbitkan cookie baru untuk pemanggil.
+- Hak akses ADMIN/MARKETER dan kepemilikan `ownerId` tetap berlaku. Reset seluruh CRM produksi ditolak. Alamat internal/hash password/versi sesi tidak dikirim ke publik.
+- UI mode PostgreSQL menampilkan penyimpanan persisten dan tanggal WIB saat ini, bukan tanggal acuan atau label data contoh. Preview/demo eksplisit mempertahankan perilaku historis.
+- `/api/health` tetap liveness; `/api/ready` memeriksa koneksi, schema dan admin tersedia tanpa mengungkap kredensial. Startup container menunggu migrasi/bootstrap berhasil sebelum melayani request.
+- Penerimaan: uji CRUD/auth/isolasi/konkurensi terhadap PostgreSQL nyata, restart/recreate aplikasi dan restart database, backup/restore disposable, build dan regresi. Belum merupakan bukti deployment VPS.
+
+### Batas infrastruktur Docker (riwayat v0.14)
+
+`APP_ORIGIN` adalah konfigurasi runtime, bukan kolom atau tabel baru. Bukti pengujian build, runtime dan batas produksi ada di [QA Docker](QA_DOCKER.md).
+
+Revisi container tidak menambah schema, ORM, migration atau integrasi database. PostgreSQL 16 pada profile Compose `database` hanya menyediakan infrastruktur opsional dengan named volume. Registry member, override akun, versi sesi yang dimutasi, dan CRM sintetis tetap memori proses; restart/redeploy dapat menghapus perubahan. Volume PostgreSQL tidak mempersist data yang masih berada di memori Node.js. Backup database belum menjadi backup CRM sampai integrasi persistence selesai.
 
 ### Kontak member marketing — implementasi lokal
 

@@ -6,11 +6,14 @@ import {
   resetMemberPassword,
   getMarketingMemberById,
 } from "@/lib/member-store";
+import { isDatabaseConfigured } from "@/lib/db/client";
+import { getDbMemberById, resetDbMemberPassword } from "@/lib/persistent-accounts";
+import { getRuntimeSession } from "@/lib/runtime-auth";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
-  const session = await getServerSession();
+  const session = isDatabaseConfigured() ? await getRuntimeSession() : await getServerSession();
   if (!session) {
     throw new CrmDataError("Sesi tidak ditemukan atau kedaluwarsa.", 401);
   }
@@ -62,7 +65,7 @@ export async function POST(
     await requireAdmin();
     const { id } = await props.params;
 
-    const existing = getMarketingMemberById(id);
+    const existing = isDatabaseConfigured() ? await getDbMemberById(id) : getMarketingMemberById(id);
     if (!existing) {
       throw new CrmDataError("Member marketing tidak ditemukan.", 404);
     }
@@ -73,7 +76,7 @@ export async function POST(
       throw new CrmDataError("Kata sandi baru minimal 8 karakter.", 400);
     }
 
-    const result = resetMemberPassword(id, newPassword);
+    const result = isDatabaseConfigured() ? await resetDbMemberPassword(id, newPassword) : resetMemberPassword(id, newPassword);
 
     return NextResponse.json(
       { success: true, message: "Kata sandi member marketing berhasil diperbarui.", memberId: result.memberId },

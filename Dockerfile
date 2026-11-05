@@ -1,41 +1,37 @@
-# Multi-stage Dockerfile for Satukelas Marketing CRM (Next.js Standalone)
-FROM node:22-alpine AS base
+# syntax=docker/dockerfile:1
+FROM node:24-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# 1. Install dependencies
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
-# 2. Build application
 FROM base AS builder
-WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+# Secrets are supplied only at runtime, never as build arguments.
 ENV NODE_ENV=production
 RUN npm run build
 
-# 3. Production runner
 FROM base AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0 \
+    USE_SECURE_COOKIES=true \
+    MARKETING_ENABLE_DEMO_AUTH=false \
+    MARKETING_ENABLE_SYNTHETIC_CRM=false \
+    MARKETING_ENABLE_ADMIN_PREVIEW=false
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
-
-# Copy static assets and standalone server output
-COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
-
+COPY --chown=nextjs:nodejs migrations ./migrations
+COPY --chown=nextjs:nodejs src/lib/db/config.mjs ./src/lib/db/config.mjs
+COPY --chown=nextjs:nodejs scripts/container-config.mjs scripts/container-start.mjs scripts/container-healthcheck.mjs scripts/db-migrate.mjs scripts/db-bootstrap.mjs ./scripts/
+USER nextjs:nodejs
 EXPOSE 3000
-
-CMD ["node", "server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["node", "scripts/container-healthcheck.mjs"]
+CMD ["node", "scripts/container-start.mjs"]
